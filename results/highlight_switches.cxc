@@ -1,6 +1,0 @@
-# ChimeraX script to highlight BADASP >95th percentile functional switches
-# Usage: open your_structure.pdb, then run this script (open highlight_switches.cxc)
-
-color all #e0e0e0
-color :52,212,202,116,161,98,104,148,72,80,147,198,79 red
-show :52,212,202,116,161,98,104,148,72,80,147,198,79 surface

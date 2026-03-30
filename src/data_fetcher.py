@@ -3,7 +3,7 @@ import requests
 import argparse
 import sys
 
-def fetch_uniprot_fasta(interpro_id, output_path, reviewed_only=True):
+def fetch_uniprot_fasta(interpro_id, output_path, reviewed_only=False):
     """
     Fetches protein sequences associated with an InterPro ID from UniProt.
     """
@@ -62,8 +62,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetch InterPro associated sequences from UniProt.")
     parser.add_argument("--id", type=str, default="IPR019888", help="InterPro ID to fetch (default: IPR019888)")
     parser.add_argument("--output", type=str, default="data/raw/IPR019888.fasta", help="Output FASTA file path")
-    parser.add_argument("--all", action="store_true", help="Fetch unreviewed sequences as well (default: reviewed only)")
+    parser.add_argument("--reviewed", action="store_true", help="Fetch reviewed sequences only (default: fetch all)")
     
     args = parser.parse_args()
     
-    fetch_uniprot_fasta(args.id, args.output, reviewed_only=not args.all)
+    fetch_uniprot_fasta(args.id, args.output, reviewed_only=args.reviewed)
