@@ -6,4 +6,5 @@ __pycache__/
 *.tar.gz
 data/
 results/
+results_clustered/
 *.state
