@@ -26,12 +26,33 @@ def fetch_uniprot_fasta(interpro_id, output_path, reviewed_only=True):
         
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
-        with open(output_path, 'wb') as f:
+        temp_path = output_path + ".tmp"
+        with open(temp_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
                     
-        print(f"Successfully downloaded sequences to {output_path}")
+        # Filter sequences by length using interquartile range (IQR) to remove extreme outliers
+        from Bio import SeqIO
+        import numpy as np
+        
+        records = list(SeqIO.parse(temp_path, "fasta"))
+        if not records:
+            print("No sequences found from UniProt.")
+            sys.exit(1)
+            
+        lengths = [len(r.seq) for r in records]
+        q1, q3 = np.percentile(lengths, [25, 75])
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        
+        filtered_records = [r for r in records if lower_bound <= len(r.seq) <= upper_bound]
+        
+        SeqIO.write(filtered_records, output_path, "fasta")
+        os.remove(temp_path)
+        
+        print(f"Successfully downloaded {len(records)} sequences. Filtered to {len(filtered_records)} within expected length ({lower_bound:.0f}-{upper_bound:.0f} AAs). Saved to {output_path}")
         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching data from UniProt: {e}", file=sys.stderr)

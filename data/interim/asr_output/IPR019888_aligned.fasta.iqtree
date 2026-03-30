@@ -3,7 +3,7 @@ IQ-TREE 2.4.0 built Mar  8 2025
 Input file name: data/interim/asr_output/IPR019888_aligned.fasta
 User tree file name: data/interim/IPR019888.tree
 Type of analysis: tree reconstruction
-Random seed number: 602137
+Random seed number: 938761
 
 REFERENCES
 ----------
@@ -19,11 +19,11 @@ https://doi.org/10.1093/molbev/msaa015
 SEQUENCE ALIGNMENT
 ------------------
 
-Input data: 81 sequences with 557 amino-acid sites
-Number of constant sites: 359 (= 64.4524% of all sites)
-Number of invariant (constant or ambiguous constant) sites: 359 (= 64.4524% of all sites)
-Number of parsimony informative sites: 174
-Number of distinct site patterns: 272
+Input data: 79 sequences with 224 amino-acid sites
+Number of constant sites: 35 (= 15.625% of all sites)
+Number of invariant (constant or ambiguous constant) sites: 35 (= 15.625% of all sites)
+Number of parsimony informative sites: 170
+Number of distinct site patterns: 218
 
 SUBSTITUTION PROCESS
 --------------------
@@ -37,17 +37,17 @@ Model of rate heterogeneity: Uniform
 USER TREE
 ---------
 
-Log-likelihood of the tree: -18830.0811 (s.e. 1177.2780)
-Unconstrained log-likelihood (without tree): -2762.5863
-Number of free parameters (#branches + #model parameters): 153
-Akaike information criterion (AIC) score: 37966.1623
-Corrected Akaike information criterion (AICc) score: 38083.0953
-Bayesian information criterion (BIC) score: 38627.5148
+Log-likelihood of the tree: -17234.8102 (s.e. 753.4360)
+Unconstrained log-likelihood (without tree): -1203.3677
+Number of free parameters (#branches + #model parameters): 149
+Akaike information criterion (AIC) score: 34767.6204
+Corrected Akaike information criterion (AICc) score: 35371.6744
+Bayesian information criterion (BIC) score: 35275.9556
 
-Total tree length (sum of branch lengths): 37.2488
-Sum of internal branch lengths: 15.9458 (42.8089% of tree length)
+Total tree length (sum of branch lengths): 36.4312
+Sum of internal branch lengths: 15.8963 (43.6336% of tree length)
 
-WARNING: 1 near-zero internal branches (<0.0018) should be treated with caution
+WARNING: 1 near-zero internal branches (<0.0045) should be treated with caution
          Such branches are denoted by '**' in the figure below
 
 NOTE: Tree is UNROOTED although outgroup taxon 'sp|I6YBQ3|LRPA_MYCTU' is drawn at root
@@ -71,158 +71,154 @@ NOTE: Tree is UNROOTED although outgroup taxon 'sp|I6YBQ3|LRPA_MYCTU' is drawn a
 |                            |  +**sp|P0A2S0|LRP_SALTY
 |                      +-----| (Node8)
 |                      |     +---sp|P45265|LRP_HAEIN
-|                +-----| (Node7)
-|                |     |    +------sp|Q44333|PUTR_AGRTU
-|                |     +----| (Node13)
-|                |          +-------sp|Q52710|PUTR_RHOCA
-|             +--| (Node6)
-|             |  +----------------sp|E1V7V9|DOEX_HALED
-|          +--| (Node5)
-|          |  |                       +**sp|P0ACJ5|DECR_ECOLI
-|          |  |               +-------| (Node18)
-|          |  |               |       +**sp|P0ACJ6|DECR_ECOL6
-|          |  |               |       |
-|          |  |               |       +**sp|P0ACJ7|DECR_ECO57
-|          |  |            +--| (Node17)
-|          |  |            |  |         +--sp|F8DT92|GRP_ZYMMA
-|          |  |            |  +---------| (Node19)
-|          |  |            |            +**sp|P0DJA5|GRP_ZYMMO
-|          |  |     +------| (Node16)
-|          |  |     |      |               +**sp|F8DT24|ZRP_ZYMMA
-|          |  |     |      +---------------| (Node20)
-|          |  |     |                      +--sp|P0DJA6|ZRP_ZYMMO
-|          |  |  +--| (Node15)
-|          |  |  |  |     +-------sp|P42179|BKDR_PSEPU
-|          |  |  |  |  +--| (Node22)
-|          |  |  |  |  |  +-----------sp|P50337|Y4SM_SINFN
-|          |  |  |  +--| (Node21)
-|          |  |  |     +---------sp|Q9I1M3|BKDR_PSEAE
-|          |  +--| (Node14)
-|          |     |     +-------------sp|P44580|Y224_HAEIN
-|          |     +-----| (Node23)
-|          |           +-----------sp|P55658|Y4TD_SINFN
-|       +--| (Node4)
-|       |  |                     +--sp|A0QVQ9|ALDR_MYCS2
-|       |  |     +---------------| (Node26)
-|       |  |     |               +----sp|O33321|ALDR_MYCTU
-|       |  |  +--| (Node25)
-|       |  |  |  +---------sp|P56901|LRP_RHIME
-|       |  +--| (Node24)
-|       |     +------------sp|O07920|AZLB_BACSU
-|    +--| (Node3)
-|    |  |     +--------------sp|O31497|YEZC_BACSU
-|    |  +-----| (Node27)
-|    |        |  +-----------sp|P96582|LRPC_BACSU
-|    |        +--| (Node28)
-|    |           |       +------sp|P96652|LRPA_BACSU
-|    |           +-------| (Node29)
-|    |                   +-----------sp|P96653|LRPB_BACSU
-+----| (Node2)
-|    |                               +----------sp|D3DFS4|NIRDL_HYDTT
-|    |                           +---| (Node37)
-|    |                           |   |             +---------sp|I6UH61|NIRDL_PARPN
-|    |                           |   |          +--| (Node40)
-|    |                           |   |          |  +-------------sp|Q52524|NIRG_STUST
-|    |                           |   |   +------| (Node39)
-|    |                           |   |   |      +------sp|P95412|NIRD_PSEAE
-|    |                           |   +---| (Node38)
-|    |                           |       |  +--------------sp|Q30Y72|AHBA_OLEA2
-|    |                           |       +--| (Node41)
-|    |                           |          +-------sp|Q46CH6|AHBA_METBF
-|    |                   +-------| (Node36)
-|    |                   |       |             +--sp|Q30WH3|AHBB_OLEA2
-|    |                   |       |  +----------| (Node43)
-|    |                   |       |  |          +--sp|Q725I2|AHBB_NITV2
-|    |                   |       +--| (Node42)
-|    |                   |          +------------sp|Q46CH5|AHBB_METBF
-|    |                +--| (Node35)
-|    |                |  |                       +--sp|O58741|REG4_PYRHO
-|    |                |  |                    +--| (Node45)
-|    |                |  |                    |  +--sp|Q9V029|REG4_PYRAB
-|    |                |  +--------------------| (Node44)
-|    |                |                       +---sp|Q8U2H1|REG4_PYRFU
-|    |             +--| (Node34)
-|    |             |  |    +-----------------sp|O58782|REG5_PYRHO
-|    |             |  +----| (Node46)
-|    |             |       |                +--sp|O57802|REG2_PYRHO
-|    |             |       |           +----| (Node48)
-|    |             |       |           |    +--sp|Q9V2K6|REG2_PYRAB
-|    |             |       +-----------| (Node47)
-|    |             |                   +-----sp|Q8TZE2|REG2_PYRFU
-|    |          +--| (Node33)
-|    |          |  |                          +**sp|P0ACI6|ASNC_ECOLI
-|    |          |  |                    +-----| (Node53)
-|    |          |  |                    |     +**sp|P0ACI7|ASNC_ECOL6
-|    |          |  |                    |     |
-|    |          |  |                    |     +**sp|P0ACI8|ASNC_ECO57
-|    |          |  |                    |     |
-|    |          |  |                    |     +**sp|P0ACI9|ASNC_SHIFL
-|    |          |  |        +-----------| (Node52)
-|    |          |  |        |           +--sp|P44337|ASNC_HAEIN
-|    |          |  |     +--| (Node51)
-|    |          |  |     |  +-----------sp|Q57615|PTR1_METJA
-|    |          |  |  +--| (Node50)
-|    |          |  |  |  |     +----------------sp|B0R4X4|LRPA1_HALS3
-|    |          |  |  |  +-----| (Node54)
-|    |          |  |  |        |      +--sp|P42180|REG7_PYRFU
-|    |          |  |  |        |  +---| (Node56)
-|    |          |  |  |        |  |   |  +--sp|O59256|REG7_PYRHO
-|    |          |  |  |        |  |   +--| (Node57)
-|    |          |  |  |        |  |      +--sp|Q9V159|REG7_PYRAB
-|    |          |  |  |        +--| (Node55)
-|    |          |  |  |           +------sp|Q58133|PTR2_METJA
-|    |          |  +--| (Node49)
-|    |          |     |   +------------------sp|O05217|YWRC_BACSU
-|    |          |     +---| (Node58)
-|    |          |         |          +--sp|O57880|REG3_PYRHO
-|    |          |         |       +--| (Node60)
-|    |          |         |       |  +--sp|Q9V2D7|REG3_PYRAB
-|    |          |         +-------| (Node59)
-|    |          |                 +--sp|Q8U1H7|REG3_PYRFU
-|    |       +--| (Node32)
-|    |       |  |                  +--sp|Q980W9|LYSM_SACS2
-|    |       |  |        +---------| (Node64)
-|    |       |  |        |         +--sp|Q976J7|LYSM_SULTO
-|    |       |  |     +--| (Node63)
-|    |       |  |     |  +-----------------sp|O05236|YUGG_BACSU
-|    |       |  |  +--| (Node62)
-|    |       |  |  |  |      +------------------sp|B0R717|LRP_HALS3
-|    |       |  |  |  +------| (Node65)
-|    |       |  |  |         |      +--sp|O59309|REG8_PYRHO
-|    |       |  |  |         |   +--| (Node67)
-|    |       |  |  |         |   |  +--sp|Q9V1E5|REG8_PYRAB
-|    |       |  |  |         +---| (Node66)
-|    |       |  |  |             +--sp|Q8U067|REG8_PYRFU
-|    |       |  +--| (Node61)
-|    |       |     |                  +--sp|O59579|REG9_PYRHO
-|    |       |     |               +--| (Node69)
-|    |       |     |               |  +--sp|Q9UY16|REG9_PYRAB
-|    |       |     +---------------| (Node68)
-|    |       |                     +--sp|Q8U445|REG9_PYRFU
-|    |  +----| (Node31)
-|    |  |    |          +--sp|O59188|REG6_PYRHO
-|    |  |    |       +--| (Node71)
-|    |  |    |       |  +--sp|Q9V0Y9|REG6_PYRAB
-|    |  |    +-------| (Node70)
-|    |  |            +--sp|Q8U0P3|REG6_PYRFU
-|    +--| (Node30)
-|       |                    +--sp|O57818|REG1_PYRHO
-|       |                 +--| (Node73)
-|       |                 |  +--sp|Q9V2M0|REG1_PYRAB
-|       +-----------------| (Node72)
+|                 +----| (Node7)
+|                 |    |     +------sp|Q44333|PUTR_AGRTU
+|                 |    +-----| (Node13)
+|                 |          +-------sp|Q52710|PUTR_RHOCA
+|              +--| (Node6)
+|              |  +----------------sp|E1V7V9|DOEX_HALED
+|           +--| (Node5)
+|           |  |                      +**sp|P0ACJ5|DECR_ECOLI
+|           |  |              +-------| (Node18)
+|           |  |              |       +**sp|P0ACJ6|DECR_ECOL6
+|           |  |              |       |
+|           |  |              |       +**sp|P0ACJ7|DECR_ECO57
+|           |  |           +--| (Node17)
+|           |  |           |  |         +--sp|F8DT92|GRP_ZYMMA
+|           |  |           |  +---------| (Node19)
+|           |  |           |            +**sp|P0DJA5|GRP_ZYMMO
+|           |  |     +-----| (Node16)
+|           |  |     |     |               +**sp|F8DT24|ZRP_ZYMMA
+|           |  |     |     +---------------| (Node20)
+|           |  |     |                     +--sp|P0DJA6|ZRP_ZYMMO
+|           |  |  +--| (Node15)
+|           |  |  |  |     +-------------sp|P44580|Y224_HAEIN
+|           |  |  |  +-----| (Node21)
+|           |  |  |        +------------sp|P55658|Y4TD_SINFN
+|           |  +--| (Node14)
+|           |     |     +--------sp|P42179|BKDR_PSEPU
+|           |     |  +--| (Node23)
+|           |     |  |  +-----------sp|P50337|Y4SM_SINFN
+|           |     +--| (Node22)
+|           |        +---------sp|Q9I1M3|BKDR_PSEAE
+|        +--| (Node4)
+|        |  |                      +--sp|A0QVQ9|ALDR_MYCS2
+|        |  |      +---------------| (Node26)
+|        |  |      |               +----sp|O33321|ALDR_MYCTU
+|        |  |  +---| (Node25)
+|        |  |  |   +---------sp|P56901|LRP_RHIME
+|        |  +--| (Node24)
+|        |     +------------sp|O07920|AZLB_BACSU
+|     +--| (Node3)
+|     |  |     +--------------sp|O31497|YEZC_BACSU
+|     |  +-----| (Node27)
+|     |        |  +-----------sp|P96582|LRPC_BACSU
+|     |        +--| (Node28)
+|     |           |       +------sp|P96652|LRPA_BACSU
+|     |           +-------| (Node29)
+|     |                   +-----------sp|P96653|LRPB_BACSU
++-----| (Node2)
+|     |                  +--sp|O59188|REG6_PYRHO
+|     |               +--| (Node33)
+|     |               |  +--sp|Q9V0Y9|REG6_PYRAB
+|     |       +-------| (Node32)
+|     |       |       +--sp|Q8U0P3|REG6_PYRFU
+|     |  +----| (Node31)
+|     |  |    |                                +**sp|P0ACI6|ASNC_ECOLI
+|     |  |    |                           +----| (Node40)
+|     |  |    |                           |    +**sp|P0ACI7|ASNC_ECOL6
+|     |  |    |                           |    |
+|     |  |    |                           |    +**sp|P0ACI8|ASNC_ECO57
+|     |  |    |                           |    |
+|     |  |    |                           |    +**sp|P0ACI9|ASNC_SHIFL
+|     |  |    |              +------------| (Node39)
+|     |  |    |              |            +--sp|P44337|ASNC_HAEIN
+|     |  |    |           +--| (Node38)
+|     |  |    |           |  |  +------------sp|Q57615|PTR1_METJA
+|     |  |    |           |  +--| (Node41)
+|     |  |    |           |     |      +------------------sp|B0R717|LRP_HALS3
+|     |  |    |           |     +------| (Node42)
+|     |  |    |           |            |      +--sp|O59309|REG8_PYRHO
+|     |  |    |           |            |   +--| (Node44)
+|     |  |    |           |            |   |  +--sp|Q9V1E5|REG8_PYRAB
+|     |  |    |           |            +---| (Node43)
+|     |  |    |           |                +--sp|Q8U067|REG8_PYRFU
+|     |  |    |        +--| (Node37)
+|     |  |    |        |  |         +-----------------sp|B0R4X4|LRPA1_HALS3
+|     |  |    |        |  |      +--| (Node46)
+|     |  |    |        |  |      |  |   +--sp|P42180|REG7_PYRFU
+|     |  |    |        |  |      |  +---| (Node47)
+|     |  |    |        |  |      |      |  +--sp|O59256|REG7_PYRHO
+|     |  |    |        |  |      |      +--| (Node48)
+|     |  |    |        |  |      |         +--sp|Q9V159|REG7_PYRAB
+|     |  |    |        |  +------| (Node45)
+|     |  |    |        |         +-----sp|Q58133|PTR2_METJA
+|     |  |    |     +--| (Node36)
+|     |  |    |     |  |               +--sp|Q980W9|LYSM_SACS2
+|     |  |    |     |  |     +---------| (Node51)
+|     |  |    |     |  |     |         +--sp|Q976J7|LYSM_SULTO
+|     |  |    |     |  |  +--| (Node50)
+|     |  |    |     |  |  |  +-----------------sp|O05236|YUGG_BACSU
+|     |  |    |     |  +--| (Node49)
+|     |  |    |     |     |                  +--sp|O59579|REG9_PYRHO
+|     |  |    |     |     |               +--| (Node53)
+|     |  |    |     |     |               |  +--sp|Q9UY16|REG9_PYRAB
+|     |  |    |     |     +---------------| (Node52)
+|     |  |    |     |                     +--sp|Q8U445|REG9_PYRFU
+|     |  |    |  +--| (Node35)
+|     |  |    |  |  |                            +-------sp|P95412|NIRD_PSEAE
+|     |  |    |  |  |                       +----| (Node58)
+|     |  |    |  |  |                       |    +---------------sp|Q52524|NIRG_STUST
+|     |  |    |  |  |                +------| (Node57)
+|     |  |    |  |  |                |      |  +--------------sp|Q30Y72|AHBA_OLEA2
+|     |  |    |  |  |                |      +--| (Node59)
+|     |  |    |  |  |                |         +------sp|Q46CH6|AHBA_METBF
+|     |  |    |  |  |      +---------| (Node56)
+|     |  |    |  |  |      |         |              +--sp|Q30WH3|AHBB_OLEA2
+|     |  |    |  |  |      |         |  +-----------| (Node61)
+|     |  |    |  |  |      |         |  |           +---sp|Q725I2|AHBB_NITV2
+|     |  |    |  |  |      |         +--| (Node60)
+|     |  |    |  |  |      |            +------------sp|Q46CH5|AHBB_METBF
+|     |  |    |  |  |   +--| (Node55)
+|     |  |    |  |  |   |  |                      +--sp|O58741|REG4_PYRHO
+|     |  |    |  |  |   |  |                   +--| (Node63)
+|     |  |    |  |  |   |  |                   |  +--sp|Q9V029|REG4_PYRAB
+|     |  |    |  |  |   |  +-------------------| (Node62)
+|     |  |    |  |  |   |                      +---sp|Q8U2H1|REG4_PYRFU
+|     |  |    |  |  +---| (Node54)
+|     |  |    |  |      |    +------------------sp|O58782|REG5_PYRHO
+|     |  |    |  |      +----| (Node64)
+|     |  |    |  |           |                 +--sp|O57802|REG2_PYRHO
+|     |  |    |  |           |            +----| (Node66)
+|     |  |    |  |           |            |    +--sp|Q9V2K6|REG2_PYRAB
+|     |  |    |  |           +------------| (Node65)
+|     |  |    |  |                        +-----sp|Q8TZE2|REG2_PYRFU
+|     |  |    +--| (Node34)
+|     |  |       |    +------------------sp|O05217|YWRC_BACSU
+|     |  |       +----| (Node67)
+|     |  |            |            +--sp|O57880|REG3_PYRHO
+|     |  |            |         +--| (Node69)
+|     |  |            |         |  +--sp|Q9V2D7|REG3_PYRAB
+|     |  |            +---------| (Node68)
+|     |  |                      +--sp|Q8U1H7|REG3_PYRFU
+|     +--| (Node30)
+|        |                   +--sp|O57818|REG1_PYRHO
+|        |                +--| (Node71)
+|        |                |  +--sp|Q9V2M0|REG1_PYRAB
+|        +----------------| (Node70)
 |                         +--sp|Q8U4M7|REG1_PYRFU
 |
-+--------------sp|P71888|R2324_MYCTU
++---------------sp|P71888|R2324_MYCTU
 
 Tree in newick format:
 
-(sp|I6YBQ3|LRPA_MYCTU:0.5709688899,(((((((((((sp|P0ACJ0|LRP_ECOLI:0.0000010000,sp|P0ACJ1|LRP_ECOL6:0.0000010000,sp|P0ACJ2|LRP_ECO57:0.0000010000,sp|P0ACJ3|LRP_SHIFL:0.0000010000,sp|P0ACJ4|LRP_KLEAE:0.0000010000)Node12:0.0000010000,sp|P37425|LRP_SERMA:0.0060799918)Node11:0.0053799318,sp|P37424|LRP_KLEPN:0.0011785529)Node10:0.0055294291,sp|P0A2S0|LRP_SALTY:0.0000010000)Node9:0.0898285220,sp|P45265|LRP_HAEIN:0.1956282730)Node8:0.2767384599,(sp|Q44333|PUTR_AGRTU:0.3286328095,sp|Q52710|PUTR_RHOCA:0.3780318772)Node13:0.2663501685)Node7:0.2773516741,sp|E1V7V9|DOEX_HALED:0.7795642377)Node6:0.0615686546,(((((sp|P0ACJ5|DECR_ECOLI:0.0000010000,sp|P0ACJ6|DECR_ECOL6:0.0000010000,sp|P0ACJ7|DECR_ECO57:0.0000010000)Node18:0.3641151836,(sp|F8DT92|GRP_ZYMMA:0.0059593701,sp|P0DJA5|GRP_ZYMMO:0.0000010000)Node19:0.4657230735)Node17:0.0965701755,(sp|F8DT24|ZRP_ZYMMA:0.0000010000,sp|P0DJA6|ZRP_ZYMMO:0.0063672920)Node20:0.7307342650)Node16:0.3237703375,((sp|P42179|BKDR_PSEPU:0.4076678970,sp|P50337|Y4SM_SINFN:0.5768179798)Node22:0.0554356257,sp|Q9I1M3|BKDR_PSEAE:0.4818661908)Node21:0.1263627186)Node15:0.0886218690,(sp|P44580|Y224_HAEIN:0.6652646852,sp|P55658|Y4TD_SINFN:0.5672140105)Node23:0.2911175096)Node14:0.1159339743)Node5:0.0854039448,(((sp|A0QVQ9|ALDR_MYCS2:0.0522936620,sp|O33321|ALDR_MYCTU:0.2356469034)Node26:0.7424635869,sp|P56901|LRP_RHIME:0.4912942379)Node25:0.1770223127,sp|O07920|AZLB_BACSU:0.6229039490)Node24:0.1191745018)Node4:0.1355691657,(sp|O31497|YEZC_BACSU:0.7013945657,(sp|P96582|LRPC_BACSU:0.5701762657,(sp|P96652|LRPA_BACSU:0.3525507000,sp|P96653|LRPB_BACSU:0.5489183892)Node29:0.4006351873)Node28:0.1525092317)Node27:0.2873373492)Node3:0.0939191734,((((((((sp|D3DFS4|NIRDL_HYDTT:0.5084297469,(((sp|I6UH61|NIRDL_PARPN:0.4738603111,sp|Q52524|NIRG_STUST:0.6632476442)Node40:0.1006060936,sp|P95412|NIRD_PSEAE:0.3541716571)Node39:0.3177804376,(sp|Q30Y72|AHBA_OLEA2:0.6938501311,sp|Q46CH6|AHBA_METBF:0.3898551730)Node41:0.0711415175)Node38:0.2165066999)Node37:0.1977041753,((sp|Q30WH3|AHBB_OLEA2:0.1456250631,sp|Q725I2|AHBB_NITV2:0.1798499484)Node43:0.5179656297,sp|Q46CH5|AHBB_METBF:0.5899365712)Node42:0.1802998971)Node36:0.4061524272,((sp|O58741|REG4_PYRHO:0.0534801193,sp|Q9V029|REG4_PYRAB:0.0938478267)Node45:0.1137169600,sp|Q8U2H1|REG4_PYRFU:0.2081817499)Node44:0.9713084515)Node35:0.0282689307,(sp|O58782|REG5_PYRHO:0.8552400434,((sp|O57802|REG2_PYRHO:0.0944110862,sp|Q9V2K6|REG2_PYRAB:0.1412625170)Node48:0.2343240441,sp|Q8TZE2|REG2_PYRFU:0.2731914501)Node47:0.5787565985)Node46:0.2354825529)Node34:0.1243487870,(((((sp|P0ACI6|ASNC_ECOLI:0.0000010000,sp|P0ACI7|ASNC_ECOL6:0.0000010000,sp|P0ACI8|ASNC_ECO57:0.0000010000,sp|P0ACI9|ASNC_SHIFL:0.0000010000)Node53:0.2797286251,sp|P44337|ASNC_HAEIN:0.1451537326)Node52:0.5569329801,sp|Q57615|PTR1_METJA:0.5466508005)Node51:0.0691314029,(sp|B0R4X4|LRPA1_HALS3:0.7718202206,((sp|P42180|REG7_PYRFU:0.0130662836,(sp|O59256|REG7_PYRHO:0.0136666748,sp|Q9V159|REG7_PYRAB:0.0282069609)Node57:0.0364816420)Node56:0.2173822144,sp|Q58133|PTR2_METJA:0.3385652564)Node55:0.0575523261)Node54:0.2944400623)Node50:0.0439764952,(sp|O05217|YWRC_BACSU:0.8757271496,((sp|O57880|REG3_PYRHO:0.0216791292,sp|Q9V2D7|REG3_PYRAB:0.0403013180)Node60:0.1315893901,sp|Q8U1H7|REG3_PYRFU:0.1491374550)Node59:0.3946174366)Node58:0.2037352182)Node49:0.0872815337)Node33:0.0486289810,((((sp|Q980W9|LYSM_SACS2:0.0723578593,sp|Q976J7|LYSM_SULTO:0.1249677125)Node64:0.4547977182,sp|O05236|YUGG_BACSU:0.8270885037)Node63:0.1125690997,(sp|B0R717|LRP_HALS3:0.8860757014,((sp|O59309|REG8_PYRHO:0.0252079429,sp|Q9V1E5|REG8_PYRAB:0.0874175179)Node67:0.0147544209,sp|Q8U067|REG8_PYRFU:0.1067398345)Node66:0.1842191997)Node65:0.3422852923)Node62:0.0587246186,((sp|O59579|REG9_PYRHO:0.0277806058,sp|Q9UY16|REG9_PYRAB:0.0331649420)Node69:0.0353005422,sp|Q8U445|REG9_PYRFU:0.0718697438)Node68:0.7375057931)Node61:0.0835832979)Node32:0.0724445081,((sp|O59188|REG6_PYRHO:0.0465965276,sp|Q9V0Y9|REG6_PYRAB:0.0532875255)Node71:0.0288613928,sp|Q8U0P3|REG6_PYRFU:0.0724631512)Node70:0.3750793669)Node31:0.2451235788,((sp|O57818|REG1_PYRHO:0.0848257014,sp|Q9V2M0|REG1_PYRAB:0.0860762611)Node73:0.1564076053,sp|Q8U4M7|REG1_PYRFU:0.1378566938)Node72:0.8388668380)Node30:0.0403249520)Node2:0.2577866407,sp|P71888|R2324_MYCTU:0.7065510827)Node1;
+(sp|I6YBQ3|LRPA_MYCTU:0.5748633880,(((((((((((sp|P0ACJ0|LRP_ECOLI:0.0000010000,sp|P0ACJ1|LRP_ECOL6:0.0000010000,sp|P0ACJ2|LRP_ECO57:0.0000010000,sp|P0ACJ3|LRP_SHIFL:0.0000010000,sp|P0ACJ4|LRP_KLEAE:0.0000010000)Node12:0.0000010000,sp|P37425|LRP_SERMA:0.0060801005)Node11:0.0053838973,sp|P37424|LRP_KLEPN:0.0011708311)Node10:0.0055371367,sp|P0A2S0|LRP_SALTY:0.0000010000)Node9:0.0889440861,sp|P45265|LRP_HAEIN:0.1967715296)Node8:0.2744451428,(sp|Q44333|PUTR_AGRTU:0.3265298486,sp|Q52710|PUTR_RHOCA:0.3788031593)Node13:0.2713826180)Node7:0.2552036761,sp|E1V7V9|DOEX_HALED:0.8010442702)Node6:0.0563691838,(((((sp|P0ACJ5|DECR_ECOLI:0.0000010000,sp|P0ACJ6|DECR_ECOL6:0.0000010000,sp|P0ACJ7|DECR_ECO57:0.0000010000)Node18:0.3602567433,(sp|F8DT92|GRP_ZYMMA:0.0059594211,sp|P0DJA5|GRP_ZYMMO:0.0000010000)Node19:0.4724931705)Node17:0.0997438068,(sp|F8DT24|ZRP_ZYMMA:0.0000010000,sp|P0DJA6|ZRP_ZYMMO:0.0063673927)Node20:0.7264837554)Node16:0.2965962045,(sp|P44580|Y224_HAEIN:0.6247261855,sp|P55658|Y4TD_SINFN:0.6148567088)Node21:0.3068965654)Node15:0.0629441953,((sp|P42179|BKDR_PSEPU:0.4205165763,sp|P50337|Y4SM_SINFN:0.5750316742)Node23:0.0478554256,sp|Q9I1M3|BKDR_PSEAE:0.4776061621)Node22:0.1542414021)Node14:0.1521369719)Node5:0.0889708939,(((sp|A0QVQ9|ALDR_MYCS2:0.0494554180,sp|O33321|ALDR_MYCTU:0.2379295473)Node26:0.7491271394,sp|P56901|LRP_RHIME:0.4880139197)Node25:0.1845487053,sp|O07920|AZLB_BACSU:0.6185541719)Node24:0.1300877754)Node4:0.1419067520,(sp|O31497|YEZC_BACSU:0.7064095931,(sp|P96582|LRPC_BACSU:0.5781762634,(sp|P96652|LRPA_BACSU:0.3522192854,sp|P96653|LRPB_BACSU:0.5493552999)Node29:0.3908632392)Node28:0.1526346561)Node27:0.2754018490)Node3:0.0839186709,((((sp|O59188|REG6_PYRHO:0.0462056166,sp|Q9V0Y9|REG6_PYRAB:0.0536961898)Node33:0.0390132104,sp|Q8U0P3|REG6_PYRFU:0.0624281620)Node32:0.3751037572,(((((((sp|P0ACI6|ASNC_ECOLI:0.0000010000,sp|P0ACI7|ASNC_ECOL6:0.0000010000,sp|P0ACI8|ASNC_ECO57:0.0000010000,sp|P0ACI9|ASNC_SHIFL:0.0000010000)Node40:0.2646709743,sp|P44337|ASNC_HAEIN:0.1590489192)Node39:0.6163035268,(sp|Q57615|PTR1_METJA:0.6185990629,(sp|B0R717|LRP_HALS3:0.8803196651,((sp|O59309|REG8_PYRHO:0.0266747643,sp|Q9V1E5|REG8_PYRAB:0.0861191226)Node44:0.0129569624,sp|Q8U067|REG8_PYRFU:0.1086339150)Node43:0.2007575976)Node42:0.3521751978)Node41:0.0577722417)Node38:0.0255441009,((sp|B0R4X4|LRPA1_HALS3:0.8098926060,(sp|P42180|REG7_PYRFU:0.0144409762,(sp|O59256|REG7_PYRHO:0.0136959094,sp|Q9V159|REG7_PYRAB:0.0281755932)Node48:0.0350269318)Node47:0.1903695312)Node46:0.0711297393,sp|Q58133|PTR2_METJA:0.3112360667)Node45:0.3559429126)Node37:0.0389493162,(((sp|Q980W9|LYSM_SACS2:0.0744031668,sp|Q976J7|LYSM_SULTO:0.1228355589)Node51:0.4476794078,sp|O05236|YUGG_BACSU:0.8374136207)Node50:0.1175069004,((sp|O59579|REG9_PYRHO:0.0278174135,sp|Q9UY16|REG9_PYRAB:0.0331695757)Node53:0.0333047199,sp|Q8U445|REG9_PYRFU:0.0738243428)Node52:0.7396766806)Node49:0.0918090781)Node36:0.0440772966,(((((sp|P95412|NIRD_PSEAE:0.3682674319,sp|Q52524|NIRG_STUST:0.7266381168)Node58:0.2406420195,(sp|Q30Y72|AHBA_OLEA2:0.7038645178,sp|Q46CH6|AHBA_METBF:0.3426307822)Node59:0.1185995487)Node57:0.3466912580,((sp|Q30WH3|AHBB_OLEA2:0.1207143782,sp|Q725I2|AHBB_NITV2:0.2056344336)Node61:0.5426873851,sp|Q46CH5|AHBB_METBF:0.6089957997)Node60:0.1512757082)Node56:0.4874978195,((sp|O58741|REG4_PYRHO:0.0550297516,sp|Q9V029|REG4_PYRAB:0.0929496068)Node63:0.1031498940,sp|Q8U2H1|REG4_PYRFU:0.2173277241)Node62:0.9146183963)Node55:0.0223012110,(sp|O58782|REG5_PYRHO:0.8528489836,((sp|O57802|REG2_PYRHO:0.0935486619,sp|Q9V2K6|REG2_PYRAB:0.1421023724)Node66:0.2389793172,sp|Q8TZE2|REG2_PYRFU:0.2681024269)Node65:0.5851696634)Node64:0.2261917586)Node54:0.1886484596)Node35:0.0418180683,(sp|O05217|YWRC_BACSU:0.8467721555,((sp|O57880|REG3_PYRHO:0.0213233973,sp|Q9V2D7|REG3_PYRAB:0.0406204458)Node69:0.1113963536,sp|Q8U1H7|REG3_PYRFU:0.1697347528)Node68:0.4460948096)Node67:0.2522862366)Node34:0.0408609934)Node31:0.2478515870,((sp|O57818|REG1_PYRHO:0.0819946711,sp|Q9V2M0|REG1_PYRAB:0.0889616399)Node71:0.1437289977,sp|Q8U4M7|REG1_PYRFU:0.1506248297)Node70:0.7981407815)Node30:0.0510649079)Node2:0.2773526767,sp|P71888|R2324_MYCTU:0.7322423984)Node1;
 
 ALISIM COMMAND
 --------------
 To simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis, you can use the following command:
 
---alisim simulated_MSA -t data/interim/asr_output/IPR019888_aligned.fasta.treefile -m "WAG" --length 557
+--alisim simulated_MSA -t data/interim/asr_output/IPR019888_aligned.fasta.treefile -m "WAG" --length 224
 
 To mimic the alignment used to produce this analysis, i.e. simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis *and* copying the same gap positions as the original alignment, you can use the following command:
 
@@ -237,7 +233,7 @@ For more information on using AliSim, please visit: www.iqtree.org/doc/AliSim
 TIME STAMP
 ----------
 
-Date and time: Mon Mar 30 14:19:32 2026
-Total CPU time used: 27.8515 seconds (0h:0m:27s)
-Total wall-clock time used: 28.0851 seconds (0h:0m:28s)
+Date and time: Mon Mar 30 14:36:51 2026
+Total CPU time used: 28.6272 seconds (0h:0m:28s)
+Total wall-clock time used: 28.9325 seconds (0h:0m:28s)
 

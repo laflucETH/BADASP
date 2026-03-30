@@ -49,14 +49,33 @@ def create_visualizations(scores_file, output_dir):
     plt.savefig(os.path.join(output_dir, 'max_score_per_site.png'), dpi=300)
     plt.close()
     
-    # Print the top 10 duplication nodes with highest specificity scores
-    top_events = df.nlargest(10, 'BADASP_Score')
-    print("\nTop 10 Functional Specification Events:")
-    print(top_events[['Node', 'Site', 'Cons1', 'Cons2', 'Distance', 'BADASP_Score']].to_string(index=False))
+    # Isolate functional switches (>95th percentile)
+    if 'Is_Functional_Switch' in df.columns:
+        switches = df[df['Is_Functional_Switch']]
+    else:
+        threshold = df['BADASP_Score'].quantile(0.95)
+        switches = df[df['BADASP_Score'] > threshold]
+        
+    print(f"\nFound {len(switches)} switch events.")
     
-    # Save top 10 to CSV for the notebook
+    # Save the top switches
+    top_events = df.nlargest(10, 'BADASP_Score')
     top_events.to_csv(os.path.join(output_dir, 'top_events.csv'), index=False)
-    print(f"\nSaved plots and top events data to {output_dir}")
+    
+    # Generate ChimeraX script for 3D mapping
+    unique_sites = switches['Site'].unique()
+    cxc_path = os.path.join(output_dir, 'highlight_switches.cxc')
+    with open(cxc_path, 'w') as f:
+        f.write("# ChimeraX script to highlight BADASP >95th percentile functional switches\n")
+        f.write("# Usage: open your_structure.pdb, then run this script (open highlight_switches.cxc)\n\n")
+        f.write("color all #e0e0e0\n") # Color everything light gray
+        if len(unique_sites) > 0:
+            site_str = ",".join(str(int(s)) for s in unique_sites)
+            f.write(f"color :{site_str} red\n") # Color switches red
+            f.write(f"show :{site_str} surface\n")
+            
+    print(f"Generated ChimeraX 3D mapping script at {cxc_path}")
+    print(f"\nSaved plots and output data to {output_dir}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Visualize BADASP scores.")
