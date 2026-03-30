@@ -1,0 +1,132 @@
+IQ-TREE multicore version 2.4.0 for MacOS ARM 64-bit built Mar  8 2025
+Developed by Bui Quang Minh, Nguyen Lam Tung, Olga Chernomor, Heiko Schmidt,
+Dominik Schrempf, Michael Woodhams, Ly Trong Nhan, Thomas Wong
+
+Host:    sysbc-mac-584 (SSE4.2, 48 GB RAM)
+Command: iqtree -s data/interim/asr_output/IPR019888_aligned.fasta -te data/interim/IPR019888.tree -asr -m WAG -T AUTO -redo
+Seed:    602137 (Using SPRNG - Scalable Parallel Random Number Generator)
+Time:    Mon Mar 30 14:19:04 2026
+Kernel:  SSE2 - auto-detect threads (12 CPU cores detected)
+
+Reading alignment file data/interim/asr_output/IPR019888_aligned.fasta ... Fasta format detected
+Reading fasta file: done in 0.000633955 secs using 87.39% CPU
+Alignment most likely contains protein sequences
+Alignment has 81 sequences with 557 columns, 272 distinct patterns
+174 parsimony-informative, 24 singleton sites, 359 constant sites
+                       Gap/Ambiguity  Composition  p-value
+Analyzing sequences: done in 8.60691e-05 secs using 88.3% CPU
+   1  sp|I6YBQ3|LRPA_MYCTU    73.07%    failed      1.74%
+   2  sp|P0ACJ0|LRP_ECOLI     70.56%    passed     67.20%
+   3  sp|A0QVQ9|ALDR_MYCS2    69.30%    failed      4.26%
+   4  sp|D3DFS4|NIRDL_HYDTT   40.04%    passed     10.19%
+   5  sp|O59188|REG6_PYRHO    72.89%    passed     58.51%
+   6  sp|P0ACI6|ASNC_ECOLI    72.71%    passed     82.56%
+   7  sp|P71888|R2324_MYCTU   73.43%    passed      6.52%
+   8  sp|B0R4X4|LRPA1_HALS3   74.51%    failed      0.12%
+   9  sp|I6UH61|NIRDL_PARPN   41.47%    failed      0.00%
+  10  sp|O33321|ALDR_MYCTU    67.86%    failed      3.66%
+  11  sp|P0A2S0|LRP_SALTY     70.56%    passed     72.92%
+  12  sp|P0ACJ5|DECR_ECOLI    72.71%    passed     75.88%
+  13  sp|P37424|LRP_KLEPN     70.56%    passed     66.82%
+  14  sp|P37425|LRP_SERMA     70.56%    passed     63.74%
+  15  sp|P42180|REG7_PYRFU    74.69%    failed      2.86%
+  16  sp|P95412|NIRD_PSEAE    73.07%    failed      0.02%
+  17  sp|Q30WH3|AHBB_OLEA2    71.63%    passed     22.77%
+  18  sp|Q30Y72|AHBA_OLEA2    70.56%    passed     75.40%
+  19  sp|Q46CH5|AHBB_METBF    72.71%    passed     95.90%
+  20  sp|Q46CH6|AHBA_METBF    67.32%    passed     90.87%
+  21  sp|Q57615|PTR1_METJA    73.43%    passed     58.47%
+  22  sp|Q58133|PTR2_METJA    74.87%    passed      7.42%
+  23  sp|Q725I2|AHBB_NITV2    71.27%    passed      7.24%
+  24  sp|Q980W9|LYSM_SACS2    74.51%    failed      3.94%
+  25  sp|B0R717|LRP_HALS3     72.35%    failed      0.63%
+  26  sp|E1V7V9|DOEX_HALED    71.63%    passed     86.22%
+  27  sp|F8DT24|ZRP_ZYMMA     72.53%    passed     65.02%
+  28  sp|F8DT92|GRP_ZYMMA     70.56%    passed     97.02%
+  29  sp|O05217|YWRC_BACSU    71.63%    passed     86.06%
+  30  sp|O05236|YUGG_BACSU    70.20%    passed     14.49%
+  31  sp|O07920|AZLB_BACSU    71.81%    passed     58.96%
+  32  sp|O31497|YEZC_BACSU    75.04%    passed      5.59%
+  33  sp|O57818|REG1_PYRHO    72.17%    passed     67.23%
+  34  sp|O57880|REG3_PYRHO    71.63%    passed     88.83%
+  35  sp|O58782|REG5_PYRHO    71.45%    passed     32.14%
+  36  sp|O59256|REG7_PYRHO    74.69%    passed     38.42%
+  37  sp|O59309|REG8_PYRHO    73.43%    passed     50.03%
+  38  sp|O59579|REG9_PYRHO    73.07%    passed     89.53%
+  39  sp|P0ACI7|ASNC_ECOL6    72.71%    passed     82.56%
+  40  sp|P0ACI8|ASNC_ECO57    72.71%    passed     82.56%
+  41  sp|P0ACI9|ASNC_SHIFL    72.71%    passed     82.56%
+  42  sp|P0ACJ1|LRP_ECOL6     70.56%    passed     67.20%
+  43  sp|P0ACJ2|LRP_ECO57     70.56%    passed     67.20%
+  44  sp|P0ACJ3|LRP_SHIFL     70.56%    passed     67.20%
+  45  sp|P0ACJ4|LRP_KLEAE     70.56%    passed     67.20%
+  46  sp|P0ACJ6|DECR_ECOL6    72.71%    passed     75.88%
+  47  sp|P0ACJ7|DECR_ECO57    72.71%    passed     75.88%
+  48  sp|P0DJA5|GRP_ZYMMO     70.56%    passed     95.99%
+  49  sp|P0DJA6|ZRP_ZYMMO     72.53%    passed     70.11%
+  50  sp|P42179|BKDR_PSEPU    71.10%    passed     32.76%
+  51  sp|P44337|ASNC_HAEIN    73.07%    passed     81.79%
+  52  sp|P44580|Y224_HAEIN    69.84%    passed     10.20%
+  53  sp|P45265|LRP_HAEIN     70.20%    passed     84.27%
+  54  sp|P50337|Y4SM_SINFN    77.20%    passed     98.69%
+  55  sp|P55658|Y4TD_SINFN    69.66%    passed     72.17%
+  56  sp|P56901|LRP_RHIME     71.99%    passed     28.82%
+  57  sp|P96582|LRPC_BACSU    74.15%    passed     97.37%
+  58  sp|P96652|LRPA_BACSU    75.58%    passed      7.13%
+  59  sp|P96653|LRPB_BACSU    73.25%    passed      7.80%
+  60  sp|Q44333|PUTR_AGRTU    71.99%    passed     95.50%
+  61  sp|Q52524|NIRG_STUST    73.61%    failed      0.47%
+  62  sp|Q52710|PUTR_RHOCA    72.35%    passed     58.70%
+  63  sp|Q8U067|REG8_PYRFU    73.43%    passed     74.26%
+  64  sp|Q8U0P3|REG6_PYRFU    72.89%    passed     34.49%
+  65  sp|Q8U1H7|REG3_PYRFU    73.43%    passed     93.74%
+  66  sp|Q8U445|REG9_PYRFU    73.07%    passed     63.02%
+  67  sp|Q8U4M7|REG1_PYRFU    72.17%    passed     52.17%
+  68  sp|Q976J7|LYSM_SULTO    74.87%    passed     35.85%
+  69  sp|Q9I1M3|BKDR_PSEAE    72.53%    passed     38.02%
+  70  sp|Q9UY16|REG9_PYRAB    73.07%    passed     90.99%
+  71  sp|Q9V0Y9|REG6_PYRAB    72.89%    passed     60.85%
+  72  sp|Q9V159|REG7_PYRAB    74.69%    passed     39.16%
+  73  sp|Q9V1E5|REG8_PYRAB    73.61%    passed     22.01%
+  74  sp|Q9V2D7|REG3_PYRAB    71.63%    passed     73.14%
+  75  sp|Q9V2M0|REG1_PYRAB    72.17%    passed     78.96%
+  76  sp|O57802|REG2_PYRHO    73.43%    passed      9.96%
+  77  sp|O58741|REG4_PYRHO    70.92%    passed     40.79%
+  78  sp|Q8TZE2|REG2_PYRFU    73.43%    passed     23.28%
+  79  sp|Q8U2H1|REG4_PYRFU    70.92%    passed     24.53%
+  80  sp|Q9V029|REG4_PYRAB    70.92%    passed     40.40%
+  81  sp|Q9V2K6|REG2_PYRAB    73.43%    passed     35.47%
+WARNING: 79 sequences contain more than 50% gaps/ambiguity
+****  TOTAL                   71.52%  10 sequences failed composition chi2 test (p-value<5%; df=19)
+Reading input tree file data/interim/IPR019888.tree ...
+
+NOTE: 3 MB RAM (0 GB) is required!
+Measuring multi-threading efficiency up to 12 CPU cores
+Increase to 10 rounds for branch lengths
+201 trees examined
+Threads: 1 / Time: 12.051 sec / Speedup: 1.000 / Efficiency: 100% / LogL: -28474
+Threads: 2 / Time: 15.845 sec / Speedup: 0.761 / Efficiency: 38% / LogL: -28474
+BEST NUMBER OF THREADS: 1
+
+Estimate model parameters (epsilon = 0.010)
+1. Initial log-likelihood: -18863.368
+Optimal log-likelihood: -18830.081
+Parameters optimization took 1 rounds (0.029 sec)
+Wrote distance file to... 
+BEST SCORE FOUND : -18830.081
+Ancestral state probabilities printed to data/interim/asr_output/IPR019888_aligned.fasta.state
+Total tree length: 37.249
+
+Total number of iterations: 0
+CPU time used for tree search: 0.000 sec (0h:0m:0s)
+Wall-clock time used for tree search: 0.000 sec (0h:0m:0s)
+Total CPU time used: 27.852 sec (0h:0m:27s)
+Total wall-clock time used: 28.084 sec (0h:0m:28s)
+
+Analysis results written to: 
+  IQ-TREE report:                data/interim/asr_output/IPR019888_aligned.fasta.iqtree
+  Maximum-likelihood tree:       data/interim/asr_output/IPR019888_aligned.fasta.treefile
+  Ancestral state:               data/interim/asr_output/IPR019888_aligned.fasta.state
+  Screen log file:               data/interim/asr_output/IPR019888_aligned.fasta.log
+
+Date and Time: Mon Mar 30 14:19:32 2026
