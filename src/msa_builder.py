@@ -21,12 +21,15 @@ def build_msa(input_fasta, output_fasta, threads=1):
         with open(output_fasta, "w") as out_f:
             subprocess.run(cmd, stdout=out_f, stderr=subprocess.PIPE, check=True, text=True)
             
-        print("Trimming MSA with trimAl (using -automated1 heuristic)...")
+        # Use a gap-fraction threshold of 0.5: remove columns where >50% of residues are gaps.
+        # -automated1 over-trims this dataset (it retained only 26 of 1427 columns); 
+        # -gt 0.5 yields ~151 columns, matching the expected ~155 AA domain length.
+        print("Trimming MSA with trimAl (-gt 0.5, keeping columns present in >=50% of seqs)...")
         trimal_cmd = [
             "trimal",
             "-in", output_fasta,
             "-out", output_fasta + ".trimmed",
-            "-automated1"
+            "-gt", "0.5"
         ]
         
         trimal_process = subprocess.run(trimal_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
