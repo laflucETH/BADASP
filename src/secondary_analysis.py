@@ -61,16 +61,21 @@ def run_secondary_analyses(scores_csv, mapping_csv, output_dir, pdb_id="2CG4", c
         print("Required Switch_Count not found in mapping.")
         return
     
-    # Beltrao defined "frequently switching" as > 90th percentile of switch counts
-    freq_threshold = domain_df['Switch_Count'].quantile(0.90)
-    # Ensure minimum 1 switch
-    if freq_threshold == 0: freq_threshold = 1 
+    if 'Is_Frequent' not in domain_df.columns:
+        switch_counts = domain_df['Switch_Count']
+        if len(switch_counts) > 0:
+            freq_threshold = max(1.0, switch_counts.quantile(0.90))
+        else:
+            freq_threshold = 1.0
+        domain_df['Is_Frequent'] = domain_df['Switch_Count'] >= freq_threshold
+        
+    frequent_residues = domain_df[domain_df['Is_Frequent'] == True]['PDB_Residue'].dropna().astype(int).tolist()
     
-    domain_df['Is_Frequent'] = domain_df['Switch_Count'] >= freq_threshold
-    frequent_residues = domain_df[domain_df['Is_Frequent']]['PDB_Residue'].astype(int).tolist()
-    generic_residues = domain_df[~domain_df['Is_Frequent']]['PDB_Residue'].astype(int).tolist()
+    # Generic residues are essentially all HTH residues (12-73) that are NOT frequently switching
+    hth_range = set(range(12, 74))
+    generic_residues = [r for r in hth_range if r not in frequent_residues]
     
-    print(f"Identified {len(frequent_residues)} frequently switching residues (th={freq_threshold})")
+    print(f"Identified {len(frequent_residues)} frequently switching residues (th={freq_threshold}) and {len(generic_residues)} generic residues.")
     
     # 2. Extract 3D Coordinates
     print(f"Fetching {pdb_id} coordinates...")
@@ -142,12 +147,10 @@ def run_secondary_analyses(scores_csv, mapping_csv, output_dir, pdb_id="2CG4", c
     # The AsnC HTH DNA-binding recognition helix is Helix C (residues 35-49)
     hth_start, hth_end = 35, 49
     
-    domain_df['Is_DNA_Helix'] = (domain_df['PDB_Residue'] >= hth_start) & (domain_df['PDB_Residue'] <= hth_end)
-    
-    a = len(domain_df[(domain_df['Is_Frequent'] == True) & (domain_df['Is_DNA_Helix'] == True)])
-    b = len(domain_df[(domain_df['Is_Frequent'] == False) & (domain_df['Is_DNA_Helix'] == True)])
-    c = len(domain_df[(domain_df['Is_Frequent'] == True) & (domain_df['Is_DNA_Helix'] == False)])
-    d = len(domain_df[(domain_df['Is_Frequent'] == False) & (domain_df['Is_DNA_Helix'] == False)])
+    a = len([r for r in frequent_residues if hth_start <= r <= hth_end])
+    b = len([r for r in generic_residues if hth_start <= r <= hth_end])
+    c = len([r for r in frequent_residues if not (hth_start <= r <= hth_end)])
+    d = len([r for r in generic_residues if not (hth_start <= r <= hth_end)])
     
     contingency = [[a, b], [c, d]]
     odds_ratio, fisher_p = fisher_exact(contingency, alternative='greater')
