@@ -165,11 +165,12 @@ def generate_structure_figures(scores_csv, output_dir, pdb_id="2CG4", chain="A",
             count = int(row['Switch_Count'])
             f.write(f"setattr :{pdb_res} residues switch_count {count}\n")
             
-        f.write(f"\n# Apply color gradient (White -> Red) representing switch count density\n")
+        f.write("\n# Apply color gradient (White -> Red) representing switch count density\n")
         # Ensure we color up to max_count
         f.write(f"color byattribute switch_count palette white:red range 0,{max_count}\n\n")
-            
-    print(f"Saved ChimeraX publication script to {cxc_path}")
+        
+    mapped_counts.to_csv(os.path.join(output_dir, 'per_residue_scores.csv'), index=False)
+    print(f"Saved ChimeraX publication script and mapped_counts CSV to {output_dir}")
 
 
 if __name__ == "__main__":
