@@ -99,62 +99,78 @@ def run_secondary_analyses(scores_csv, mapping_csv, output_dir, pdb_id="2CG4", c
     # 3. Kolmogorov-Smirnov Test (Structural Clustering)
     ks_stat, p_val = ks_2samp(freq_distances, generic_distances)
     
-    plt.figure(figsize=(8, 5))
-    sns.kdeplot(freq_distances, fill=True, color='red', label='Frequently Switching Residues')
-    sns.kdeplot(generic_distances, fill=True, color='blue', label='Generic Residues')
-    plt.title(f"Structural Clustering of Switches (PDB: {pdb_id})\nKS-stat={ks_stat:.3f}, p={p_val:.2e}")
-    plt.xlabel(r"Pairwise C-$\alpha$ Distance ($\AA$)")
-    plt.ylabel("Density")
+    plt.figure(figsize=(10, 5))
+    
+    plt.subplot(1, 2, 1)
+    try:
+        sns.kdeplot(freq_distances, fill=True, color='red', label='Freq Switches', warn_singular=False)
+        sns.kdeplot(generic_distances, fill=True, color='blue', label='Generic', warn_singular=False)
+    except Exception:
+        pass
+    plt.title(f"3D Clustering (KS-stat={ks_stat:.2f}, p={p_val:.2f})")
+    plt.xlabel(r"Pairwise Distance ($\AA$)")
     plt.legend()
+    
+    # Calculate shortest distance to Recognition Helix (Residues 35-49 in 2CG4)
+    rec_helix = list(range(35, 50))
+    rec_coords = [ca_coords[r] for r in rec_helix if r in ca_coords]
+    
+    def min_dist_to_helix(coord):
+        if not rec_coords: return 0
+        return min(np.linalg.norm(coord - hc) for hc in rec_coords)
+        
+    freq_dist_to_dna = [min_dist_to_helix(c) for c in freq_coords]
+    generic_dist_to_dna = [min_dist_to_helix(c) for c in generic_coords]
+    
+    ks_stat_dna, p_val_dna = ks_2samp(freq_dist_to_dna, generic_dist_to_dna)
+    
+    plt.subplot(1, 2, 2)
+    try:
+        sns.kdeplot(freq_dist_to_dna, fill=True, color='red', label='Freq Switches', warn_singular=False)
+        sns.kdeplot(generic_dist_to_dna, fill=True, color='blue', label='Generic', warn_singular=False)
+    except Exception:
+        pass
+    plt.title(f"Distance to DNA Helix (p={p_val_dna:.2f})")
+    plt.xlabel(r"Min Distance to Helix 3 ($\AA$)")
+    plt.legend()
+    
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'structural_clustering_ks_test.png'), dpi=300)
-    print(f"Saved structural clustering plot. KS p-value: {p_val:.2e}")
+    print(f"Saved structural clustering plots.")
     
-    # 4. Fisher's Exact Test (Enrichment in DNA-Contacting HTH Domain)
-    # The AsnC HTH DNA-binding domain is located exactly at N-terminus (residues 12-73 in P0ACJ0/2CG4)
-    hth_start, hth_end = 12, 73
+    # 4. Fisher's Exact Test (Enrichment directly in Recognition Helix 35-49)
+    # The AsnC HTH DNA-binding recognition helix is Helix C (residues 35-49)
+    hth_start, hth_end = 35, 49
     
-    domain_df['Is_HTH'] = (domain_df['PDB_Residue'] >= hth_start) & (domain_df['PDB_Residue'] <= hth_end)
+    domain_df['Is_DNA_Helix'] = (domain_df['PDB_Residue'] >= hth_start) & (domain_df['PDB_Residue'] <= hth_end)
     
-    # Contingency Table
-    #                 | Frequent Switch | Non-Frequent Switch
-    # ----------------|-----------------|---------------------
-    # In HTH Domain   |       A         |          B
-    # Outside HTH     |       C         |          D
-    
-    a = len(domain_df[(domain_df['Is_Frequent'] == True) & (domain_df['Is_HTH'] == True)])
-    b = len(domain_df[(domain_df['Is_Frequent'] == False) & (domain_df['Is_HTH'] == True)])
-    c = len(domain_df[(domain_df['Is_Frequent'] == True) & (domain_df['Is_HTH'] == False)])
-    d = len(domain_df[(domain_df['Is_Frequent'] == False) & (domain_df['Is_HTH'] == False)])
+    a = len(domain_df[(domain_df['Is_Frequent'] == True) & (domain_df['Is_DNA_Helix'] == True)])
+    b = len(domain_df[(domain_df['Is_Frequent'] == False) & (domain_df['Is_DNA_Helix'] == True)])
+    c = len(domain_df[(domain_df['Is_Frequent'] == True) & (domain_df['Is_DNA_Helix'] == False)])
+    d = len(domain_df[(domain_df['Is_Frequent'] == False) & (domain_df['Is_DNA_Helix'] == False)])
     
     contingency = [[a, b], [c, d]]
     odds_ratio, fisher_p = fisher_exact(contingency, alternative='greater')
     
-    print("\n--- Fisher's Exact Test (HTH Domain Enrichment) ---")
+    print("\n--- Fisher's Exact Test (Recognition Helix Enrichment) ---")
     print(f"Table: [[{a}, {b}], [{c}, {d}]]")
     print(f"Odds Ratio: {odds_ratio:.2f}, p-value: {fisher_p:.4f}")
     
     with open(os.path.join(output_dir, 'secondary_analysis_stats.txt'), 'w') as f:
         f.write("=== Beltrao/Bradley Replicative Secondary Analyses ===\n\n")
-        f.write("1. Structural Clustering (KS Test)\n")
-        f.write(f"KS-statistic: {ks_stat:.4f}\n")
-        f.write(f"P-value: {p_val:.2e}\n")
-        if p_val < 0.05:
-            f.write("Conclusion: Frequently switching residues are significantly clustered in 3D space.\n\n")
-        else:
-            f.write("Conclusion: Switch residues do not significantly cluster differently than generic residues.\n\n")
+        f.write("1. Structural Clustering (KS Test on internal distances)\n")
+        f.write(f"KS-statistic: {ks_stat:.4f}, P-value: {p_val:.2e}\n\n")
+        
+        f.write("2. Proximity to DNA Recognition Helix (KS Test)\n")
+        f.write(f"KS-statistic: {ks_stat_dna:.4f}, P-value: {p_val_dna:.2e}\n\n")
             
-        f.write("2. Functional Enrichment (Fisher's Exact Test on HTH residues 12-73)\n")
-        f.write(f"Frequent Switches in HTH: {a}\n")
-        f.write(f"Non-Frequent in HTH: {b}\n")
+        f.write("3. Functional Enrichment (Fisher's Exact Test on DNA-Binding Helix 35-49)\n")
+        f.write(f"Frequent Switches in Rec Helix: {a}\n")
+        f.write(f"Generic Residues in Rec Helix: {b}\n")
         f.write(f"Frequent Switches Outside: {c}\n")
-        f.write(f"Non-Frequent Outside: {d}\n")
+        f.write(f"Generic Residues Outside: {d}\n")
         f.write(f"Odds Ratio: {odds_ratio:.2f}\n")
         f.write(f"P-value: {fisher_p:.4f}\n")
-        if fisher_p < 0.05:
-            f.write("Conclusion: Switches are significantly enriched in the DNA-binding domain.\n")
-        else:
-            f.write("Conclusion: No significant enrichment in the DNA-binding domain.\n")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
