@@ -153,8 +153,8 @@ def generate_structure_figures(scores_csv, output_dir, pdb_id="2CG4", chain="A",
         f.write(f"# ChimeraX script – BADASP functional switch counts mapped on PDB {pdb_id}\n")
         f.write(f"open {pdb_id}\n")
         f.write(f"hide all\n")
-        f.write(f"show cartoon\n")
-        f.write(f"color all #f0f0f0\n\n")
+        f.write("# Set publication-ready white background\n")
+        f.write("set bg_color white\n\n")
         
         f.write("# Initialize switch_count attribute to 0 for all residues\n")
         f.write(f"setattr :* residues switch_count 0 create true\n\n")
@@ -168,16 +168,6 @@ def generate_structure_figures(scores_csv, output_dir, pdb_id="2CG4", chain="A",
         f.write(f"\n# Apply color gradient (White -> Red) representing switch count density\n")
         # Ensure we color up to max_count
         f.write(f"color byattribute switch_count palette white:red range 0,{max_count}\n\n")
-        
-        # Highlight top 5% highly switched residues as thick tubes or spheres
-        cutoff = mapped_counts['Switch_Count'].quantile(0.90) if not mapped_counts.empty else 0
-        high_switches = mapped_counts[mapped_counts['Switch_Count'] >= cutoff]
-        if not high_switches.empty:
-            res_str = ",".join(str(r) for r in high_switches['PDB_Residue'])
-            f.write(f"# Highlight highest-frequency switch positions\n")
-            f.write(f"show :{res_str} atoms\n")
-            f.write(f"style :{res_str} stick\n")
-            f.write(f"cartoon style :{res_str} width 1.5 thick 1.5\n")
             
     print(f"Saved ChimeraX publication script to {cxc_path}")
 
