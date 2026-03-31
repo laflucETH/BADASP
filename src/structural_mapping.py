@@ -157,13 +157,13 @@ def generate_structure_figures(scores_csv, output_dir, pdb_id="2CG4", chain="A",
         f.write(f"color all #f0f0f0\n\n")
         
         f.write("# Initialize switch_count attribute to 0 for all residues\n")
-        f.write(f"setattr res switch_count 0 create true\n\n")
+        f.write(f"setattr :* residues switch_count 0 create true\n\n")
         
         f.write("# Set switch_count attribute for observed functional switches\n")
         for _, row in mapped_counts.iterrows():
             pdb_res = int(row['PDB_Residue'])
             count = int(row['Switch_Count'])
-            f.write(f"setattr res switch_count {count} :{pdb_res}\n")
+            f.write(f"setattr :{pdb_res} residues switch_count {count}\n")
             
         f.write(f"\n# Apply color gradient (White -> Red) representing switch count density\n")
         # Ensure we color up to max_count
