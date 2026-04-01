@@ -40,19 +40,19 @@ def align_sequences(seq1, seq2):
     Aligns seq1 (PDB chain) to seq2 (MSA reference sequence).
     Returns a map from seq2 position (0-based) to seq1 position (0-based).
     """
-    aligner = Align.PairwiseAligner()
-    aligner.substitution_matrix = Align.substitution_matrices.load("BLOSUM62")
-    aligner.open_gap_score = -10
-    aligner.extend_gap_score = -1
-    alignments = aligner.align(seq1, seq2)
-    best = next(iter(alignments))
+    from Bio import pairwise2
+    # Local alignment with match=2, mismatch=-1, open=-10, extend=-1
+    alns = pairwise2.align.localms(seq1, seq2, 2, -1, -10, -1)
+    best = alns[0]
     
-    # Map from seq2 (MSA seq) to seq1 (PDB seq)
     pos_map = {}
-    s1, s2 = best.aligned
-    for seg1, seg2 in zip(s1, s2):
-        for i, j in zip(range(seg1[0], seg1[1]), range(seg2[0], seg2[1])):
-            pos_map[j] = i
+    s1, s2, _, _, _ = best
+    idx1, idx2 = 0, 0
+    for char1, char2 in zip(s1, s2):
+        if char1 != '-' and char2 != '-':
+            pos_map[idx2] = idx1
+        if char1 != '-': idx1 += 1
+        if char2 != '-': idx2 += 1
     return pos_map
 
 
@@ -69,9 +69,10 @@ def generate_structure_figures(scores_csv, output_dir, pdb_id="2CG4", chain="A",
     threshold = df['BADASP_Score'].quantile(0.95)
     df['Is_Switch'] = df['BADASP_Score'] > threshold
     
-    # Count switches per site
+    # Map the SUM of BADASP raw log-likelihood scores 
+    # to create a rich continuous gradient mapping the magnitude/intensity of the switches!
     switches_df = df[df['Is_Switch']]
-    switch_counts = switches_df.groupby('Site').size().reset_index(name='Switch_Count')
+    switch_counts = switches_df.groupby('Site')['BADASP_Score'].sum().reset_index(name='Switch_Count')
     
     # Map MSA Columns -> PDB Residue Numbers
     # Default is 1:1 if mapping FASTA is not provided or ref sequence is missing
@@ -85,14 +86,12 @@ def generate_structure_figures(scores_csv, output_dir, pdb_id="2CG4", chain="A",
         best_score = -1
         ref_seq_record = None
         
-        aligner = Align.PairwiseAligner()
-        aligner.substitution_matrix = Align.substitution_matrices.load("BLOSUM62")
-        aligner.open_gap_score = -10
-        aligner.extend_gap_score = -1
+        from Bio import pairwise2
         
         for rec in msa_records:
             raw = str(rec.seq).replace("-", "")
-            score = aligner.score(pdb_seq, raw)
+            # Return max score only
+            score = pairwise2.align.localms(pdb_seq, raw, 2, -1, -5, -1, score_only=True)
             if score > best_score:
                 best_score = score
                 ref_seq_record = rec
@@ -165,9 +164,8 @@ def generate_structure_figures(scores_csv, output_dir, pdb_id="2CG4", chain="A",
             count = int(row['Switch_Count'])
             f.write(f"setattr :{pdb_res} residues switch_count {count}\n")
             
-        f.write("\n# Apply color gradient (White -> Red) representing switch count density\n")
-        # Ensure we color up to max_count
-        f.write(f"color byattribute switch_count palette white:red range 0,{max_count}\n\n")
+        f.write("\n# Apply color gradient (White -> Light Orange -> Firebrick Red) representing switch continuous intensity\n")
+        f.write(f"color byattribute switch_count palette white:orange:red range 0,{float(max_count):.2f}\n\n")
         
     mapped_counts.to_csv(os.path.join(output_dir, 'per_residue_scores.csv'), index=False)
     print(f"Saved ChimeraX publication script and mapped_counts CSV to {output_dir}")
