@@ -84,61 +84,66 @@ def run_secondary_analyses(scores_csv, mapping_csv, output_dir, pdb_id="2CG4", c
     freq_coords = [ca_coords[r] for r in frequent_residues if r in ca_coords]
     generic_coords = [ca_coords[r] for r in generic_residues if r in ca_coords]
     
-    if len(freq_coords) < 2 or len(generic_coords) < 2:
-        print("Not enough coordinates matched to perform KS test.")
-        return
+    ks_stat, p_val = float('nan'), float('nan')
+    if len(freq_coords) >= 2 and len(generic_coords) >= 2:
+        freq_distances = []
+        for i in range(len(freq_coords)):
+            for j in range(i+1, len(freq_coords)):
+                freq_distances.append(np.linalg.norm(freq_coords[i] - freq_coords[j]))
+                
+        generic_distances = []
+        for i in range(len(generic_coords)):
+            for j in range(i+1, len(generic_coords)):
+                generic_distances.append(np.linalg.norm(generic_coords[i] - generic_coords[j]))
+                
+        ks_stat, p_val = ks_2samp(freq_distances, generic_distances)
         
-    # Calculate pairwise distances
-    freq_distances = []
-    for i in range(len(freq_coords)):
-        for j in range(i+1, len(freq_coords)):
-            dist = np.linalg.norm(freq_coords[i] - freq_coords[j])
-            freq_distances.append(dist)
-            
-    generic_distances = []
-    for i in range(len(generic_coords)):
-        for j in range(i+1, len(generic_coords)):
-            dist = np.linalg.norm(generic_coords[i] - generic_coords[j])
-            generic_distances.append(dist)
-            
-    # 3. Kolmogorov-Smirnov Test (Structural Clustering)
-    ks_stat, p_val = ks_2samp(freq_distances, generic_distances)
-    
-    plt.figure(figsize=(10, 5))
-    
-    plt.subplot(1, 2, 1)
-    try:
-        sns.kdeplot(freq_distances, fill=True, color='red', label='Freq Switches', warn_singular=False)
-        sns.kdeplot(generic_distances, fill=True, color='blue', label='Generic', warn_singular=False)
-    except Exception:
-        pass
-    plt.title(f"3D Clustering (KS-stat={ks_stat:.2f}, p={p_val:.2f})")
-    plt.xlabel(r"Pairwise Distance ($\AA$)")
-    plt.legend()
-    
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        try:
+            sns.kdeplot(freq_distances, fill=True, color='red', label='Freq Switches', warn_singular=False)
+            sns.kdeplot(generic_distances, fill=True, color='blue', label='Generic', warn_singular=False)
+        except Exception:
+            pass
+        plt.title(f"3D Clustering (KS-stat={ks_stat:.2f}, p={p_val:.2f})")
+        plt.xlabel(r"Pairwise Distance ($\AA$)")
+        plt.legend()
+    else:
+        print("\n--- Structural Clustering ---")
+        print("Note: < 2 frequently switching residues. Internal pairwise KS Test skipped.")
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        plt.title("N < 2: Structural Clustering KS Test Skipped")
+        
     # Calculate shortest distance to Recognition Helix (Residues 35-49 in 2CG4)
     rec_helix = list(range(35, 50))
     rec_coords = [ca_coords[r] for r in rec_helix if r in ca_coords]
     
-    def min_dist_to_helix(coord):
-        if not rec_coords: return 0
-        return min(np.linalg.norm(coord - hc) for hc in rec_coords)
+    ks_stat_dna, p_val_dna = float('nan'), float('nan')
+    if rec_coords and len(freq_coords) >= 1 and len(generic_coords) >= 1:
+        def min_dist_to_helix(coord):
+            return min(np.linalg.norm(coord - hc) for hc in rec_coords)
+            
+        freq_dist_to_dna = [min_dist_to_helix(c) for c in freq_coords]
+        generic_dist_to_dna = [min_dist_to_helix(c) for c in generic_coords]
         
-    freq_dist_to_dna = [min_dist_to_helix(c) for c in freq_coords]
-    generic_dist_to_dna = [min_dist_to_helix(c) for c in generic_coords]
-    
-    ks_stat_dna, p_val_dna = ks_2samp(freq_dist_to_dna, generic_dist_to_dna)
-    
-    plt.subplot(1, 2, 2)
-    try:
-        sns.kdeplot(freq_dist_to_dna, fill=True, color='red', label='Freq Switches', warn_singular=False)
-        sns.kdeplot(generic_dist_to_dna, fill=True, color='blue', label='Generic', warn_singular=False)
-    except Exception:
-        pass
-    plt.title(f"Distance to DNA Helix (p={p_val_dna:.2f})")
-    plt.xlabel(r"Min Distance to Helix 3 ($\AA$)")
-    plt.legend()
-    
+        ks_stat_dna, p_val_dna = ks_2samp(freq_dist_to_dna, generic_dist_to_dna)
+        
+        plt.subplot(1, 2, 2)
+        try:
+            sns.kdeplot(freq_dist_to_dna, fill=True, color='red', label='Freq Switches', warn_singular=False)
+            sns.kdeplot(generic_dist_to_dna, fill=True, color='blue', label='Generic', warn_singular=False)
+        except Exception:
+            pass
+        plt.title(f"Distance to DNA Helix (p={p_val_dna:.2f})")
+        plt.xlabel(r"Min Distance to Helix 3 ($\AA$)")
+        plt.legend()
+    else:
+        print("\n--- Proximity to DNA Recognition Helix ---")
+        print("Note: Failed to calculate sequence centroid or arrays are empty.")
+        plt.subplot(1, 2, 2)
+        plt.title("Proximity to DNA Test Skipped")
+        
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'structural_clustering_ks_test.png'), dpi=300)
     print(f"Saved structural clustering plots.")
