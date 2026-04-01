@@ -69,10 +69,10 @@ def generate_structure_figures(scores_csv, output_dir, pdb_id="2CG4", chain="A",
     threshold = df['BADASP_Score'].quantile(0.95)
     df['Is_Switch'] = df['BADASP_Score'] > threshold
     
-    # Map the SUM of BADASP raw log-likelihood scores 
-    # to create a rich continuous gradient mapping the magnitude/intensity of the switches!
+    # As established by Beltrao/Bradley, count the absolute number of events 
+    # exceeding the global 95th percentile threshold across all branches
     switches_df = df[df['Is_Switch']]
-    switch_counts = switches_df.groupby('Site')['BADASP_Score'].sum().reset_index(name='Switch_Count')
+    switch_counts = switches_df.groupby('Site').size().reset_index(name='Switch_Count')
     
     # Map MSA Columns -> PDB Residue Numbers
     # Default is 1:1 if mapping FASTA is not provided or ref sequence is missing
