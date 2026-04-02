@@ -23,16 +23,15 @@ def plot_badasp_tree(tree_file, clade_csv, output_pdf, title="BADASP Functional 
     unique_clades = df['Functional_Clade_ID'].unique()
     print(f"Found {len(unique_clades)} distinct clades.")
     
-    # Generate distinct colors using the turbo colormap
-    cmap = plt.get_cmap('gist_rainbow')
-    colors = cmap(np.linspace(0, 1, len(unique_clades)))
+    import seaborn as sns
+    # Generate distinct pastel colors
+    pastel_palette = sns.color_palette("pastel", len(unique_clades))
     np.random.seed(42)
-    np.random.shuffle(colors) # Shuffle for maximum contrast between adjacent clades
-    clade_color_map = {clade: mcolors.to_hex(c) for clade, c in zip(unique_clades, colors)}
+    indexed_palette = list(pastel_palette)
+    np.random.shuffle(indexed_palette) 
+    clade_color_map = {clade: mcolors.to_hex(c) for clade, c in zip(unique_clades, indexed_palette)}
     
     # We must explicitly color internal branches identically to their children IF the children share a clade.
-    # We basically do a bottom-up propagation: if all children of a node belong to Clade X, the node is Clade X.
-    # Otherwise, it's a structural root/transition branch.
     def assign_clade_colors(node):
         if node.is_terminal():
             clade_id = leaf_to_clade.get(node.name, None)
@@ -52,31 +51,61 @@ def plot_badasp_tree(tree_file, clade_csv, output_pdf, title="BADASP Functional 
             node.color = clade_color_map[shared_clade]
             return shared_clade
         else:
-            node.color = "#000000" # Black for nodes transitioning between distinct functional specificities
+            node.color = "#bbbbbb" # Subtle gray for internal generic structural splits
             return None
             
     assign_clade_colors(tree.root)
     
     # Plotting
-    fig = plt.figure(figsize=(15, 20), dpi=300)
+    fig = plt.figure(figsize=(12, 18), dpi=300)
     ax = fig.add_subplot(1, 1, 1)
     
     Phylo.draw(tree, axes=ax, label_func=lambda x: '', do_show=False)
     
+    # Reconstruct Y-coordinates. Phylo.draw internally iterates get_terminals() 
+    # and assigns them Y=1, Y=2... from bottom to top.
+    terminals = tree.get_terminals()
+    y_coords = {node.name: i+1 for i, node in enumerate(terminals)}
+    
+    # We find the min/max Y for each clade to draw a functional bracket!
+    clade_y_bounds = {}
+    for name, clade_id in leaf_to_clade.items():
+        if name in y_coords:
+            y = y_coords[name]
+            if clade_id not in clade_y_bounds:
+                clade_y_bounds[clade_id] = [y, y]
+            else:
+                clade_y_bounds[clade_id][0] = min(clade_y_bounds[clade_id][0], y)
+                clade_y_bounds[clade_id][1] = max(clade_y_bounds[clade_id][1], y)
+                
+    # Determine the maximum X coordinate computationally
+    ax_xlim = ax.get_xlim()
+    max_x = ax_xlim[1] * 1.05
+    bracket_extend = ax_xlim[1] * 0.02
+    
+    # Draw brackets!
+    for clade_id, (min_y, max_y) in clade_y_bounds.items():
+        color = clade_color_map[clade_id]
+        # Vertical line for the bracket spanning the clades physical height
+        ax.plot([max_x, max_x], [min_y, max_y], color=color, lw=3)
+        # Top and bottom horizontal notches
+        ax.plot([max_x - bracket_extend, max_x], [max_y, max_y], color=color, lw=2)
+        ax.plot([max_x - bracket_extend, max_x], [min_y, min_y], color=color, lw=2)
+        
+        # Determine the most prominent representative in this clade (we grab the first valid sequence structurally)
+        mid_y = (min_y + max_y) / 2
+        ax.text(max_x + bracket_extend, mid_y, clade_id, va='center', ha='left', fontsize=8, color=color, fontweight='bold')
+    
+    # Adjust axes specifically so the brackets fit flawlessly
+    ax.set_xlim(ax_xlim[0], max_x + bracket_extend * 15)
+    
     ax.set_title(title, fontsize=16)
     plt.axis('off') # Cleaner look
-    
-    # Create legend (only for first 20 to avoid completely flooding the image)
-    legend_elements = [Patch(facecolor=clade_color_map[c], label=c) for c in list(unique_clades)[:20]]
-    if len(unique_clades) > 20:
-        legend_elements.append(Patch(facecolor='#000000', label=f"+ {len(unique_clades)-20} more clades"))
-        
-    ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.05, 1), title="Functional Clades")
     
     plt.tight_layout()
     plt.savefig(output_pdf, format='pdf', bbox_inches='tight')
     plt.close()
-    print(f"Saved colored tree map to {output_pdf}")
+    print(f"Saved aesthetically-refined colored tree map to {output_pdf}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
