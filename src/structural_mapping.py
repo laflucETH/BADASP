@@ -88,7 +88,9 @@ def generate_structure_figures(scores_csv, output_dir, pdb_id="2CG4", chain="A",
         
         from Bio import pairwise2
         
-        for rec in msa_records:
+        # Limit reference alignment search to first 50 records to prevent extreme dynamic programming lockups 
+        # on large 1000+ length untrimmed full sequence datasets
+        for rec in msa_records[:50]:
             raw = str(rec.seq).replace("-", "")
             # Return max score only
             score = pairwise2.align.localms(pdb_seq, raw, 2, -1, -5, -1, score_only=True)
