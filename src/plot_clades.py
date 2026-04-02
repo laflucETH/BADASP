@@ -11,14 +11,14 @@ import sys
 # Increase recursion depth for large tree plotting
 sys.setrecursionlimit(10000)
 
-def plot_badasp_tree(tree_file, scores_file, output_pdf, title="BADASP Functional Clades"):
+def plot_badasp_tree(tree_file, scores_file, output_pdf, threshold=0.95, title="BADASP Functional Clades"):
     print(f"Loading tree: {tree_file}")
     tree = Phylo.read(tree_file, "newick")
     tree.root_at_midpoint()
     
-    # 1. Identify specific branches with >95th percentile switch events
+    # 1. Identify specific branches with target percentile switch events
     scores_df = pd.read_csv(scores_file)
-    thresh = scores_df['BADASP_Score'].quantile(0.95)
+    thresh = scores_df['BADASP_Score'].quantile(threshold)
     switches = scores_df[scores_df['BADASP_Score'] >= thresh]
     switch_nodes = set(switches['Node'].unique())
     
@@ -61,7 +61,14 @@ def plot_badasp_tree(tree_file, scores_file, output_pdf, title="BADASP Functiona
     fig = plt.figure(figsize=(12, 18), dpi=300)
     ax = fig.add_subplot(1, 1, 1)
     
-    Phylo.draw(tree, axes=ax, do_show=False)
+    # Hide all native node labels (especially dense leaf labels) for readability.
+    Phylo.draw(
+        tree,
+        axes=ax,
+        do_show=False,
+        label_func=lambda _: None,
+        branch_labels=lambda _: None,
+    )
     
     # Reconstruct Y-coordinates for brackets!
     terminals = tree.get_terminals()
@@ -110,9 +117,10 @@ def plot_badasp_tree(tree_file, scores_file, output_pdf, title="BADASP Functiona
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--tree", required=True)
-    parser.add_argument("--mapping", required=True)
+    parser.add_argument("--scores", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--title", default="Phylogenetic Landscape of BADASP Switch Events")
+    parser.add_argument("--threshold", type=float, default=0.95)
     args = parser.parse_args()
     
-    plot_badasp_tree(args.tree, args.mapping, args.output, args.title)
+    plot_badasp_tree(args.tree, args.scores, args.output, args.threshold, args.title)

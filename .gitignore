@@ -8,3 +8,5 @@ data/
 results/
 results_clustered/
 *.state
+.DS_Store
+.github/instructions/*.instructions.md
