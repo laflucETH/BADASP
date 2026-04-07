@@ -49,6 +49,13 @@
   - Re-ran clustering, MAFFT, trimAl (`-gt 0.5`), and FastTree
   - Added tests for filtering and QC plots; full suite now `10 passed`
   - Corrected rerun performed in root `venv` with SVG QC outputs
+- Critical Phase 2/3 bug-fix pass:
+  - Updated trimAl aggressiveness from `-gt 0.5` to `-gt 0.2` in `src/msa_builder.py`
+  - Added programmatic trimmed-alignment column counting from FASTA parsing (no hardcoded values)
+  - Re-ran MAFFT + trimAl + FastTree and logged verified trimmed alignment length
+  - Applied midpoint rooting (`tree.root_at_midpoint()`) before topological clustering in `src/tree_cluster.py`
+  - Re-ran clustering and regenerated dendrogram with explicit `color_threshold` equal to the exact `fcluster` cut distance
+  - Full test suite after bug-fix pass: `18 passed`
 - Housekeeping completed before Phase 3:
   - Added and populated `README.md` with purpose, status, methodology, and structure
   - Reorganized `results/` into descriptive analysis subdirectories
@@ -73,7 +80,7 @@
 - Length-filtered sequence count (130-200 AA): 110022
 - CD-HIT representative sequence count (`-c 0.60 -n 4`): 5925
 - Clustered FASTA path: `data/interim/IPR019888_clustered.fasta`
-- Trimmed alignment column length (trimAl -gt 0.5): 60
+- Trimmed alignment column length (trimAl -gt 0.2): 165
 - Trimmed alignment path: `data/interim/IPR019888_trimmed.aln`
 - Phase 2 tree path: `data/interim/IPR019888.tree`
 
@@ -82,14 +89,15 @@
 - MSA gap-per-column QC plot: `results/alignment_qc/msa_gap_profile.svg`
 - Length-filtered sequence count (130-200 AA): 110022
 - Clustered representative sequence count (`-c 0.60 -n 4`): 5925
-- Trimmed alignment column length after corrected rerun (`trimAl -gt 0.5`): 60
+- Trimmed alignment column length after corrected rerun (`trimAl -gt 0.2`): 165
 
 ## Phase 3 Metrics (Topological Subfamily Clustering)
 - Input tree path: `data/interim/IPR019888.tree`
-- Topological clades generated (after min-size filter >=5): 44
+- Topological clades generated (after min-size filter >=5): 34
 - Minimum clade size retained: 5
+- Tree rooting mode for clustering: midpoint-rooted
 - Distance threshold selection: adaptive search targeting 20-80 clades
-- Distance threshold used in latest rerun: 5.669654
+- Distance threshold used in latest rerun: 6.929765
 - Clade summary output: `results/topological_clustering/tree_clusters.csv`
 - Clade assignment output: `results/topological_clustering/tree_cluster_assignments.csv`
 - Dendrogram output: `results/topological_clustering/tree_dendrogram.svg`
@@ -99,6 +107,7 @@
 - ASR run prefix: `data/interim/asr_run`
 - LCA ancestral sequences written: 44
 - LCA ancestral FASTA output: `data/interim/ancestral_sequences.fasta`
+- Note: these Phase 4 outputs were produced before the latest midpoint-rooted Phase 3 rerun and should be refreshed against the current 34-clade assignment set.
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -121,4 +130,5 @@
   - LCA sequence extraction for valid clades: complete
 
 ## Pending (Before Phase 5)
-- User review/approval of filtered clade set, dendrogram coloring, and Phase 4 ancestral sequence outputs.
+- User review/approval of midpoint-rooted Phase 3 outputs (alignment length and clade count).
+- Refresh Phase 4 ASR outputs against current midpoint-rooted clade assignments after approval.

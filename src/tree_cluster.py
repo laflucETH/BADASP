@@ -160,6 +160,8 @@ def cluster_tree_topologically(
     dendrogram_output: Optional[Path] = None,
 ) -> Tuple[int, float]:
     tree = Phylo.read(str(tree_path), "newick")
+    # Midpoint-root FastTree output to avoid topology distortions from unrooted trees.
+    tree.root_at_midpoint()
     labels, linkage_rows = tree_to_linkage(tree)
 
     if distance_threshold is None:

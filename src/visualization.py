@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -70,7 +70,7 @@ def plot_topological_dendrogram(
     linkage_matrix: Sequence[Sequence[float]],
     output_svg: Path,
     max_leaves: int = 200,
-    color_threshold: Optional[float] = None,
+    color_threshold: float = 0.0,
 ) -> None:
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     z = np.asarray(linkage_matrix, dtype=float)
@@ -81,10 +81,9 @@ def plot_topological_dendrogram(
     plt.figure(figsize=(12, 6))
     dendrogram(
         z,
-        truncate_mode="lastp",
-        p=max_leaves,
         no_labels=True,
         color_threshold=color_threshold,
+        above_threshold_color="#666666",
     )
     set_link_color_palette(None)
     plt.title("Topological Clustering Dendrogram")
