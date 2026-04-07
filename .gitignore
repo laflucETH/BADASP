@@ -1,12 +1,46 @@
+# Python environments and caches
 venv/
+.venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Notebook and editor artifacts
 .ipynb_checkpoints/
+.DS_Store
+
+# Compressed archives and heavy binaries
 *.zip
 *.tar.gz
-data/
-results/
-results_clustered/
+*.gz
+*.cif
+
+# Pipeline-generated data and intermediates
+data/raw/**
+data/interim/**
+data/processed/**
+
+# Keep directory scaffolding tracked
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Generated results
+results/**
+results_clustered/**
+
+# Keep result root scaffold tracked
+!results/.gitkeep
+
+# Phylogeny/ASR intermediate files
 *.state
-.DS_Store
+*.treefile
+*.ckp.gz
+*.log
+*.iqtree
+
+# Agent and local instruction scratch files
 .github/instructions/*.instructions.md
+
+# Archived snapshot artifacts
+_archive_v1/
