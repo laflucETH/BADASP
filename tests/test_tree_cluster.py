@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from Bio import Phylo
 import pytest
 from scipy.cluster.hierarchy import fcluster, linkage
 
@@ -10,6 +11,7 @@ def test_cluster_tree_topologically_creates_monophyletic_clusters_and_lcas(tmp_p
     tree_path = tmp_path / "toy.tree"
     clusters_csv = tmp_path / "tree_clusters.csv"
     assignments_csv = tmp_path / "tree_cluster_assignments.csv"
+    rooted_tree_out = tmp_path / "midpoint_rooted.tree"
 
     tree_path.write_text("((A:0.1,B:0.1):0.2,(C:0.1,D:0.1):0.2);\n", encoding="utf-8")
 
@@ -19,12 +21,16 @@ def test_cluster_tree_topologically_creates_monophyletic_clusters_and_lcas(tmp_p
         assignments_output=assignments_csv,
         distance_threshold=0.25,
         min_clade_size=1,
+        rooted_tree_output=rooted_tree_out,
     )
 
     assert clade_count == 2
     assert used_threshold == 0.25
     assert clusters_csv.exists()
     assert assignments_csv.exists()
+    assert rooted_tree_out.exists()
+    parsed_tree = Phylo.read(str(rooted_tree_out), "newick")
+    assert parsed_tree.root is not None
 
     clusters_content = clusters_csv.read_text(encoding="utf-8")
     assert "clade_id,member_count,lca_node" in clusters_content

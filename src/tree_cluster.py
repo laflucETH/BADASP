@@ -153,6 +153,7 @@ def cluster_tree_topologically(
     tree_path: Path,
     clusters_output: Path,
     assignments_output: Path,
+    rooted_tree_output: Optional[Path] = None,
     distance_threshold: Optional[float] = None,
     target_min_clades: int = 20,
     target_max_clades: int = 80,
@@ -162,6 +163,11 @@ def cluster_tree_topologically(
     tree = Phylo.read(str(tree_path), "newick")
     # Midpoint-root FastTree output to avoid topology distortions from unrooted trees.
     tree.root_at_midpoint()
+
+    if rooted_tree_output is not None:
+        rooted_tree_output.parent.mkdir(parents=True, exist_ok=True)
+        Phylo.write(tree, str(rooted_tree_output), "newick")
+
     labels, linkage_rows = tree_to_linkage(tree)
 
     if distance_threshold is None:
@@ -212,6 +218,7 @@ def main() -> None:
     parser.add_argument("--tree", default="data/interim/IPR019888.tree")
     parser.add_argument("--clusters-output", default="results/topological_clustering/tree_clusters.csv")
     parser.add_argument("--assignments-output", default="results/topological_clustering/tree_cluster_assignments.csv")
+    parser.add_argument("--rooted-tree-output", default="results/topological_clustering/midpoint_rooted.tree")
     parser.add_argument("--distance-threshold", type=float, default=None)
     parser.add_argument("--target-min-clades", type=int, default=20)
     parser.add_argument("--target-max-clades", type=int, default=80)
@@ -223,6 +230,7 @@ def main() -> None:
         tree_path=Path(args.tree),
         clusters_output=Path(args.clusters_output),
         assignments_output=Path(args.assignments_output),
+        rooted_tree_output=Path(args.rooted_tree_output),
         distance_threshold=args.distance_threshold,
         target_min_clades=args.target_min_clades,
         target_max_clades=args.target_max_clades,

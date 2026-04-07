@@ -93,6 +93,7 @@
 
 ## Phase 3 Metrics (Topological Subfamily Clustering)
 - Input tree path: `data/interim/IPR019888.tree`
+- Midpoint-rooted tree artifact: `results/topological_clustering/midpoint_rooted.tree`
 - Topological clades generated (after min-size filter >=5): 34
 - Minimum clade size retained: 5
 - Tree rooting mode for clustering: midpoint-rooted
@@ -105,9 +106,11 @@
 ## Phase 4 Metrics (Ancestral Sequence Reconstruction)
 - ASR engine: IQ-TREE2 (`-asr`)
 - ASR run prefix: `data/interim/asr_run`
-- LCA ancestral sequences written: 44
+- Tree used for refreshed ASR run: `results/topological_clustering/midpoint_rooted.tree`
+- Assignments used for refreshed ASR run: `results/topological_clustering/tree_cluster_assignments.csv`
+- LCA ancestral sequences written: 34
 - LCA ancestral FASTA output: `data/interim/ancestral_sequences.fasta`
-- Note: these Phase 4 outputs were produced before the latest midpoint-rooted Phase 3 rerun and should be refreshed against the current 34-clade assignment set.
+- Refresh status: completed after rooted-tree and 34-clade Phase 3 rerun.
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -130,5 +133,4 @@
   - LCA sequence extraction for valid clades: complete
 
 ## Pending (Before Phase 5)
-- User review/approval of midpoint-rooted Phase 3 outputs (alignment length and clade count).
-- Refresh Phase 4 ASR outputs against current midpoint-rooted clade assignments after approval.
+- User review/approval of rooted-tree Phase 3 artifacts and refreshed Phase 4 ASR outputs.
