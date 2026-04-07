@@ -31,6 +31,12 @@ results_clustered/**
 
 # Keep result root scaffold tracked
 !results/.gitkeep
+!results/sequence_filtering/
+!results/alignment_qc/
+!results/topological_clustering/
+!results/sequence_filtering/.gitkeep
+!results/alignment_qc/.gitkeep
+!results/topological_clustering/.gitkeep
 
 # Phylogeny/ASR intermediate files
 *.state
