@@ -53,6 +53,13 @@
   - Added and populated `README.md` with purpose, status, methodology, and structure
   - Reorganized `results/` into descriptive analysis subdirectories
   - Routed visualization defaults to descriptive result paths
+- Implemented TDD-first Phase 3 topological clustering:
+  - Tests: `tests/test_tree_cluster.py` and visualization extensions
+  - Source: `src/tree_cluster.py`
+  - Method: topology-derived hierarchical linkage + `scipy.cluster.hierarchy.fcluster`
+  - LCA identification: computed per generated clade using phylogenetic common ancestor
+  - Dendrogram output generated as SVG in `results/topological_clustering/`
+  - Full test suite after changes: `13 passed`
 
 ## Data Metrics (Current)
 - IPR019888 raw sequence count: 117246
@@ -71,6 +78,13 @@
 - Clustered representative sequence count (`-c 0.60 -n 4`): 5925
 - Trimmed alignment column length after corrected rerun (`trimAl -gt 0.5`): 60
 
+## Phase 3 Metrics (Topological Subfamily Clustering)
+- Input tree path: `data/interim/IPR019888.tree`
+- Topological clades generated: 4444
+- Clade summary output: `results/topological_clustering/tree_clusters.csv`
+- Clade assignment output: `results/topological_clustering/tree_cluster_assignments.csv`
+- Dendrogram output: `results/topological_clustering/tree_dendrogram.svg`
+
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
   - Architecture scaffold: complete
@@ -82,6 +96,10 @@
   - MAFFT alignment + trimAl trimming: complete
   - FastTree ML phylogeny: complete
   - QC remediation pass: complete
+- Phase 3 (Topological Subfamily Clustering): complete for initial implementation, awaiting user review
+  - Topological clustering on FastTree output: complete
+  - LCA identification per clade: complete
+  - Topological dendrogram visualization: complete
 
-## Pending (Before Phase 3)
-- User review/approval of housekeeping updates and descriptive results routing.
+## Pending (Before Phase 4)
+- User review/approval of Phase 3 outputs, clade count, and clustering threshold strategy.
