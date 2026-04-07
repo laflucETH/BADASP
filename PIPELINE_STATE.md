@@ -112,25 +112,55 @@
 - LCA ancestral FASTA output: `data/interim/ancestral_sequences.fasta`
 - Refresh status: completed after rooted-tree and 34-clade Phase 3 rerun.
 
+## Phase 5 Metrics (Restricted BADASP Scoring)
+- Implementation: TDD-first with `src/badasp_core.py` and `tests/test_badasp_core.py` (11 new tests)
+- Method: Score = RC * AC * p(AC); restricted to deep clade LCA divergences only
+  - RC (Recent Conservation): fraction of modern sequences matching consensus within each clade
+  - AC (Ancestral Conservation): BLOSUM62 substitution matrix score between clade LCA pairs
+  - p(AC): joint posterior probability from IQ-TREE state file
+- LCA node mapping: automated tree traversal to map Phase 3 clade IDs to Phase 4 ASR tree nodes
+- Alignment positions scored: 165 (full trimmed alignment length)
+- BADASP score statistics:
+  - Mean: 0.2069
+  - Median: 0.1722
+  - Std. dev: 0.1105
+  - Range: [0.0697, 0.6018]
+- 95th percentile threshold: 0.4375
+- Specificity Determining Positions (SDPs) identified: **9 positions**
+- Outputs:
+  - Full scores: `results/badasp_scoring/badasp_scores.csv` (165 positions × 5 columns)
+  - SDP table: `results/badasp_scoring/badasp_sdps.csv` (9 positions × 5 columns)
+  - Distribution plot: `results/badasp_scoring/badasp_score_distribution.svg` (publication-ready SVG)
+- Test coverage: 29 tests passing (18 existing + 11 new Phase 5 tests)
+
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
   - Architecture scaffold: complete
   - Git hygiene: complete
   - Data fetcher module + tests: complete
   - Raw sequence ingestion: complete
-- Phase 2 (Alignment & Phylogeny): complete, awaiting user review
+- Phase 2 (Alignment & Phylogeny): complete, user-approved
   - Sequence clustering with CD-HIT: complete
   - MAFFT alignment + trimAl trimming: complete
   - FastTree ML phylogeny: complete
   - QC remediation pass: complete
-- Phase 3 (Topological Subfamily Clustering): complete for initial implementation, awaiting user review
+- Phase 3 (Topological Subfamily Clustering): complete, user-approved
   - Topological clustering on FastTree output: complete
   - LCA identification per clade: complete
   - Topological dendrogram visualization: complete
-
-- Phase 4 (Ancestral Sequence Reconstruction): complete for initial implementation, awaiting user review
+  - Rooted tree artifact saved: complete
+- Phase 4 (Ancestral Sequence Reconstruction): complete, user-approved
   - IQ-TREE ASR execution: complete
   - LCA sequence extraction for valid clades: complete
+  - Refresh with rooted tree: complete
+- **Phase 5 (Restricted BADASP Scoring): complete, awaiting user review**
+  - TDD-first core implementation: complete
+  - LCA node mapping (Phase 3 <-> Phase 4): complete
+  - BADASP score calculation: complete
+  - SDP identification (95th percentile): complete
+  - Score distribution visualization: complete
+  - All tests passing: complete (29/29)
 
-## Pending (Before Phase 5)
-- User review/approval of rooted-tree Phase 3 artifacts and refreshed Phase 4 ASR outputs.
+## Pending (Before Phase 6)
+- User review/approval of Phase 5 BADASP outputs and SDP table
+- Decision on Phase 6: Structural & Statistical Mapping of SDPs to PDB structures

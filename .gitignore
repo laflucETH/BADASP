@@ -42,6 +42,13 @@ results_clustered/**
 !results/topological_clustering/.gitkeep
 !results/badasp_scoring/.gitkeep
 
+# Track Phase 3 and Phase 5 outputs
+!results/topological_clustering/*.csv
+!results/topological_clustering/*.svg
+!results/topological_clustering/*.tree
+!results/badasp_scoring/*.csv
+!results/badasp_scoring/*.svg
+
 # Exploratory and test scripts (not part of production pipeline)
 src/data_fetcher.py
 src/sequence_cluster.py
