@@ -8,6 +8,8 @@ __pycache__/
 # Notebook and editor artifacts
 .ipynb_checkpoints/
 .DS_Store
+notebooks/
+docs/
 
 # Compressed archives and heavy binaries
 *.zip
@@ -34,9 +36,19 @@ results_clustered/**
 !results/sequence_filtering/
 !results/alignment_qc/
 !results/topological_clustering/
+!results/badasp_scoring/
 !results/sequence_filtering/.gitkeep
 !results/alignment_qc/.gitkeep
 !results/topological_clustering/.gitkeep
+!results/badasp_scoring/.gitkeep
+
+# Exploratory and test scripts (not part of production pipeline)
+src/data_fetcher.py
+src/sequence_cluster.py
+src/tree_builder.py
+tests/test_data_fetcher.py
+tests/test_sequence_cluster.py
+tests/test_tree_builder.py
 
 # Phylogeny/ASR intermediate files
 *.state
