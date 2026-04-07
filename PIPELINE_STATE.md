@@ -56,10 +56,10 @@
 - Implemented TDD-first Phase 3 topological clustering:
   - Tests: `tests/test_tree_cluster.py` and visualization extensions
   - Source: `src/tree_cluster.py`
-  - Method: topology-derived hierarchical linkage + `scipy.cluster.hierarchy.fcluster`
+  - Method: topology-derived hierarchical linkage + adaptive `scipy.cluster.hierarchy.fcluster` threshold selection targeting major clades
   - LCA identification: computed per generated clade using phylogenetic common ancestor
-  - Dendrogram output generated as SVG in `results/topological_clustering/`
-  - Full test suite after changes: `13 passed`
+  - Dendrogram output generated as SVG in `results/topological_clustering/` with `color_threshold` matched to the clustering cut threshold
+  - Full test suite after changes: `14 passed`
 
 ## Data Metrics (Current)
 - IPR019888 raw sequence count: 117246
@@ -80,7 +80,9 @@
 
 ## Phase 3 Metrics (Topological Subfamily Clustering)
 - Input tree path: `data/interim/IPR019888.tree`
-- Topological clades generated: 4444
+- Topological clades generated: 25
+- Distance threshold selection: adaptive search targeting 20-80 clades
+- Distance threshold used in latest rerun: 6.756665
 - Clade summary output: `results/topological_clustering/tree_clusters.csv`
 - Clade assignment output: `results/topological_clustering/tree_cluster_assignments.csv`
 - Dendrogram output: `results/topological_clustering/tree_dendrogram.svg`

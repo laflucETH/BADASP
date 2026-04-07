@@ -1,10 +1,11 @@
 import argparse
 import csv
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from Bio import Phylo
 from Bio.Phylo.BaseTree import Clade, Tree
+import numpy as np
 from scipy.cluster.hierarchy import fcluster
 
 try:
@@ -84,20 +85,75 @@ def _resolve_lca_label(tree: Tree, members: List[str]) -> str:
     return "InternalNode_unknown"
 
 
+def _clade_count_at_threshold(linkage_rows: Sequence[Sequence[float]], threshold: float) -> int:
+    cluster_ids = fcluster(linkage_rows, t=threshold, criterion="distance")
+    return len(set(int(x) for x in cluster_ids))
+
+
+def choose_distance_threshold(
+    linkage_rows: Sequence[Sequence[float]],
+    target_min_clades: int = 20,
+    target_max_clades: int = 80,
+    iterations: int = 30,
+) -> float:
+    if target_min_clades <= 0 or target_max_clades < target_min_clades:
+        raise ValueError("Invalid target clade range.")
+
+    z = np.asarray(linkage_rows, dtype=float)
+    min_dist = float(np.min(z[:, 2]))
+    max_dist = float(np.max(z[:, 2]))
+
+    low = min_dist
+    high = max_dist
+    midpoint = (target_min_clades + target_max_clades) / 2.0
+
+    sampled: List[Tuple[float, int]] = []
+
+    low_count = _clade_count_at_threshold(linkage_rows, low)
+    high_count = _clade_count_at_threshold(linkage_rows, high)
+    sampled.append((low, low_count))
+    sampled.append((high, high_count))
+
+    if target_min_clades <= low_count <= target_max_clades:
+        return low
+    if target_min_clades <= high_count <= target_max_clades:
+        return high
+
+    for _ in range(iterations):
+        mid = (low + high) / 2.0
+        mid_count = _clade_count_at_threshold(linkage_rows, mid)
+        sampled.append((mid, mid_count))
+
+        if target_min_clades <= mid_count <= target_max_clades:
+            return mid
+
+        if mid_count > target_max_clades:
+            low = mid
+        else:
+            high = mid
+
+    best_threshold, _ = min(sampled, key=lambda x: abs(x[1] - midpoint))
+    return best_threshold
+
+
 def cluster_tree_topologically(
     tree_path: Path,
     clusters_output: Path,
     assignments_output: Path,
     distance_threshold: Optional[float] = None,
+    target_min_clades: int = 20,
+    target_max_clades: int = 80,
     dendrogram_output: Optional[Path] = None,
-) -> int:
+) -> Tuple[int, float]:
     tree = Phylo.read(str(tree_path), "newick")
     labels, linkage_rows = tree_to_linkage(tree)
 
     if distance_threshold is None:
-        distances = sorted(row[2] for row in linkage_rows)
-        pivot_idx = max(0, int(0.25 * len(distances)) - 1)
-        distance_threshold = distances[pivot_idx] if distances else 0.0
+        distance_threshold = choose_distance_threshold(
+            linkage_rows=linkage_rows,
+            target_min_clades=target_min_clades,
+            target_max_clades=target_max_clades,
+        )
 
     cluster_ids = fcluster(linkage_rows, t=distance_threshold, criterion="distance")
 
@@ -123,9 +179,9 @@ def cluster_tree_topologically(
             writer.writerow([cluster_id, len(members), lca_name])
 
     if dendrogram_output is not None:
-        plot_topological_dendrogram(linkage_rows, dendrogram_output)
+        plot_topological_dendrogram(linkage_rows, dendrogram_output, color_threshold=distance_threshold)
 
-    return len(assignments)
+    return len(assignments), float(distance_threshold)
 
 
 def main() -> None:
@@ -134,17 +190,22 @@ def main() -> None:
     parser.add_argument("--clusters-output", default="results/topological_clustering/tree_clusters.csv")
     parser.add_argument("--assignments-output", default="results/topological_clustering/tree_cluster_assignments.csv")
     parser.add_argument("--distance-threshold", type=float, default=None)
+    parser.add_argument("--target-min-clades", type=int, default=20)
+    parser.add_argument("--target-max-clades", type=int, default=80)
     parser.add_argument("--dendrogram-output", default="results/topological_clustering/tree_dendrogram.svg")
     args = parser.parse_args()
 
-    clade_count = cluster_tree_topologically(
+    clade_count, used_threshold = cluster_tree_topologically(
         tree_path=Path(args.tree),
         clusters_output=Path(args.clusters_output),
         assignments_output=Path(args.assignments_output),
         distance_threshold=args.distance_threshold,
+        target_min_clades=args.target_min_clades,
+        target_max_clades=args.target_max_clades,
         dendrogram_output=Path(args.dendrogram_output),
     )
     print(f"Topological clades generated: {clade_count}")
+    print(f"Distance threshold used: {used_threshold:.6f}")
 
 
 if __name__ == "__main__":

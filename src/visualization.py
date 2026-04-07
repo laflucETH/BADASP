@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -69,12 +69,19 @@ def plot_topological_dendrogram(
     linkage_matrix: Sequence[Sequence[float]],
     output_svg: Path,
     max_leaves: int = 200,
+    color_threshold: Optional[float] = None,
 ) -> None:
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     z = np.asarray(linkage_matrix, dtype=float)
 
     plt.figure(figsize=(12, 6))
-    dendrogram(z, truncate_mode="lastp", p=max_leaves, no_labels=True, color_threshold=None)
+    dendrogram(
+        z,
+        truncate_mode="lastp",
+        p=max_leaves,
+        no_labels=True,
+        color_threshold=color_threshold,
+    )
     plt.title("Topological Clustering Dendrogram")
     plt.xlabel("Collapsed Leaf Groups")
     plt.ylabel("Cophenetic Distance")

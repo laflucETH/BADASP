@@ -68,7 +68,7 @@ def test_plot_topological_dendrogram_writes_svg(tmp_path: Path) -> None:
     out_svg = tmp_path / "dendrogram.svg"
     linkage_matrix = linkage([[0.0], [0.1], [1.0], [1.1]], method="average")
 
-    plot_topological_dendrogram(linkage_matrix, out_svg, max_leaves=4)
+    plot_topological_dendrogram(linkage_matrix, out_svg, max_leaves=4, color_threshold=0.5)
 
     assert out_svg.exists()
     assert out_svg.stat().st_size > 0
