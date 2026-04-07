@@ -1,11 +1,11 @@
 """
 TDD-first tests for restricted BADASP scoring (Phase 5).
 
-Tests cover:
-- Recent conservation (RC) calculation within modern clade sequences
-- Ancestral conservation (AC) calculation using BLOSUM62 substitution scores
+Tests cover the Bradley-style adaptation:
+- Recent conservation (RC) calculation using substitution similarity across modern sequences
+- Ancestral conservation (AC) as a binary identical/different call for sister clades
 - Posterior probability extraction from IQ-TREE state files
-- Score assembly and 95th percentile threshold calculation
+- Score assembly using Score = RC - (AC * p(AC))
 - Specificity Determining Position (SDP) identification
 """
 
@@ -83,6 +83,19 @@ ACDEFGHIKL-NPQRSTVWY
 
 
 @pytest.fixture
+def sample_clusters(temp_data_dir):
+    """Create a minimal clade-to-LCA mapping table."""
+    clusters_path = temp_data_dir / "test_clusters.csv"
+    clusters = pd.DataFrame({
+        "clade_id": [0, 1, 2],
+        "member_count": [2, 2, 1],
+        "lca_node": ["Node10", "Node11", "Node12"],
+    })
+    clusters.to_csv(clusters_path, index=False)
+    return clusters_path, clusters
+
+
+@pytest.fixture
 def sample_state_file(temp_data_dir):
     """Create a minimal IQ-TREE state file with posterior probabilities."""
     state_path = temp_data_dir / "test.state"
@@ -127,29 +140,25 @@ def test_parse_clade_assignments_valid_file(sample_clade_assignments):
 
 
 def test_calculate_recent_conservation_basic():
-    """Test RC calculation for a simple alignment."""
-    # Create a simple alignment: position 0 all same (A), position 1 varied
-    sequences = ["AC", "AC", "AT", "AC"]
-    rc = calculate_recent_conservation(sequences, position=0)
-    assert rc == 1.0, "Position 0 should be 100% conserved (all A)"
-    
-    rc = calculate_recent_conservation(sequences, position=1)
-    # 3 C out of 4 = 75% conservation
-    assert rc == pytest.approx(0.75)
+    """Test RC calculation should reflect substitution similarity, not raw identity fraction."""
+    conservative_site = ["A", "A", "S"]
+    divergent_site = ["A", "A", "V"]
+
+    rc_conservative = calculate_recent_conservation(conservative_site, position=0)
+    rc_divergent = calculate_recent_conservation(divergent_site, position=0)
+
+    assert rc_conservative > rc_divergent, (
+        "RC should assign higher similarity to conservative substitutions than to more divergent ones"
+    )
+    assert rc_conservative != pytest.approx(rc_divergent), (
+        "RC should not collapse to the same raw identity fraction for distinct substitution patterns"
+    )
 
 
-def test_calculate_ancestral_conservation_identity():
-    """Test AC calculation with BLOSUM62 for identical amino acids."""
-    # Identical amino acids should have high score
-    score = calculate_ancestral_conservation("A", "A")
-    assert score > 0, "Identical amino acids should have positive score"
-
-
-def test_calculate_ancestral_conservation_different():
-    """Test AC calculation with BLOSUM62 for different amino acids."""
-    score_diff = calculate_ancestral_conservation("A", "W")
-    score_same = calculate_ancestral_conservation("A", "A")
-    assert score_same > score_diff, "Same amino acids should score higher than different ones"
+def test_calculate_ancestral_conservation_binary():
+    """Test AC must be binary for sister clade ancestral residues."""
+    assert calculate_ancestral_conservation("A", "A") == 1
+    assert calculate_ancestral_conservation("A", "W") == -1
 
 
 def test_extract_posterior_probability_basic(sample_state_file):
@@ -172,16 +181,19 @@ def test_extract_posterior_probability_missing_node():
     assert prob == 0.0
 
 
-def test_compute_badasp_scores_structure(sample_alignment, sample_clade_assignments, 
-                                          sample_ancestral_sequences, sample_state_file):
+def test_compute_badasp_scores_structure(sample_alignment, sample_clade_assignments,
+                                          sample_ancestral_sequences, sample_state_file,
+                                          sample_clusters):
     """Test that BADASP scoring produces expected output structure."""
     assignments_path, _ = sample_clade_assignments
+    clusters_path, _ = sample_clusters
     
     scores = compute_badasp_scores(
         alignment_path=sample_alignment,
         assignments_path=assignments_path,
         ancestral_path=sample_ancestral_sequences,
         state_path=sample_state_file,
+        clusters_path=clusters_path,
         min_clade_size=1
     )
     
@@ -194,6 +206,38 @@ def test_compute_badasp_scores_structure(sample_alignment, sample_clade_assignme
     
     # Check that we have rows for alignment positions
     assert len(scores) > 0, "Should have scores for positions"
+
+
+def test_compute_badasp_scores_uses_bradley_formula(
+    sample_alignment,
+    sample_clade_assignments,
+    sample_ancestral_sequences,
+    sample_state_file,
+    sample_clusters,
+    monkeypatch,
+):
+    """Test the Phase 5 score must use Score = RC - (AC * p(AC))."""
+    assignments_path, _ = sample_clade_assignments
+    clusters_path, _ = sample_clusters
+
+    monkeypatch.setattr("src.badasp_core.calculate_recent_conservation", lambda sequences, position: 0.8)
+    monkeypatch.setattr("src.badasp_core.calculate_ancestral_conservation", lambda aa1, aa2: 1)
+    monkeypatch.setattr("src.badasp_core.extract_posterior_probability", lambda state_data, node, site, aa: 0.9)
+
+    scores = compute_badasp_scores(
+        alignment_path=sample_alignment,
+        assignments_path=assignments_path,
+        ancestral_path=sample_ancestral_sequences,
+        state_path=sample_state_file,
+        clusters_path=clusters_path,
+        min_clade_size=1,
+    )
+
+    expected_score = 0.8 - (1 * 0.9)
+    assert scores.loc[0, "badasp_score"] == pytest.approx(expected_score)
+    assert scores.loc[0, "rc"] == pytest.approx(0.8)
+    assert scores.loc[0, "ac"] == pytest.approx(1)
+    assert scores.loc[0, "p_ac"] == pytest.approx(0.9)
 
 
 def test_identify_sdps_threshold():

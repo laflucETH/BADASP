@@ -114,18 +114,18 @@
 
 ## Phase 5 Metrics (Restricted BADASP Scoring)
 - Implementation: TDD-first with `src/badasp_core.py` and `tests/test_badasp_core.py` (11 new tests)
-- Method: Score = RC * AC * p(AC); restricted to deep clade LCA divergences only
-  - RC (Recent Conservation): fraction of modern sequences matching consensus within each clade
-  - AC (Ancestral Conservation): BLOSUM62 substitution matrix score between clade LCA pairs
-  - p(AC): joint posterior probability from IQ-TREE state file
+- Method: Score = RC - (AC * p(AC)); restricted to deep clade LCA divergences only
+  - RC (Recent Conservation): BLOSUM62-based continuous similarity across modern sequences within each clade
+  - AC (Ancestral Conservation): binary identical/different call between sister clade ancestral residues (1 or -1)
+  - p(AC): posterior probability from IQ-TREE state file
 - LCA node mapping: automated tree traversal to map Phase 3 clade IDs to Phase 4 ASR tree nodes
 - Alignment positions scored: 165 (full trimmed alignment length)
 - BADASP score statistics:
-  - Mean: 0.2069
-  - Median: 0.1722
-  - Std. dev: 0.1105
-  - Range: [0.0697, 0.6018]
-- 95th percentile threshold: 0.4375
+  - Mean: 0.2779
+  - Median: 0.3783
+  - Std. dev: 0.3948
+  - Range: [-0.5475, 1.0036]
+- 95th percentile threshold: 0.802809
 - Specificity Determining Positions (SDPs) identified: **9 positions**
 - Outputs:
   - Full scores: `results/badasp_scoring/badasp_scores.csv` (165 positions × 5 columns)
