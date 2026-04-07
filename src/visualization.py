@@ -3,10 +3,11 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import numpy as np
 import seaborn as sns
 from Bio import SeqIO
-from scipy.cluster.hierarchy import dendrogram
+from scipy.cluster.hierarchy import dendrogram, set_link_color_palette
 
 
 def default_plot_paths() -> Tuple[Path, Path, Path]:
@@ -73,6 +74,9 @@ def plot_topological_dendrogram(
 ) -> None:
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     z = np.asarray(linkage_matrix, dtype=float)
+    # Use an expanded palette so large clade counts can still receive distinct colors.
+    palette = [plt.cm.tab20(i / 20) for i in range(20)] + [plt.cm.Set3(i / 12) for i in range(12)]
+    set_link_color_palette([mcolors.to_hex(c) for c in palette])
 
     plt.figure(figsize=(12, 6))
     dendrogram(
@@ -82,6 +86,7 @@ def plot_topological_dendrogram(
         no_labels=True,
         color_threshold=color_threshold,
     )
+    set_link_color_palette(None)
     plt.title("Topological Clustering Dendrogram")
     plt.xlabel("Collapsed Leaf Groups")
     plt.ylabel("Cophenetic Distance")

@@ -57,9 +57,15 @@
   - Tests: `tests/test_tree_cluster.py` and visualization extensions
   - Source: `src/tree_cluster.py`
   - Method: topology-derived hierarchical linkage + adaptive `scipy.cluster.hierarchy.fcluster` threshold selection targeting major clades
+  - QC filter: dropped clades with fewer than 5 sequences before downstream analysis
   - LCA identification: computed per generated clade using phylogenetic common ancestor
   - Dendrogram output generated as SVG in `results/topological_clustering/` with `color_threshold` matched to the clustering cut threshold
-  - Full test suite after changes: `14 passed`
+  - Full test suite after changes: `17 passed`
+- Implemented TDD-first Phase 4 ancestral sequence reconstruction:
+  - Test: `tests/test_asr_runner.py`
+  - Source: `src/asr_runner.py`
+  - Tooling: IQ-TREE2 `-asr` with extraction of ancestral sequences for LCA nodes of valid clades
+  - Output: `data/interim/ancestral_sequences.fasta`
 
 ## Data Metrics (Current)
 - IPR019888 raw sequence count: 117246
@@ -80,12 +86,19 @@
 
 ## Phase 3 Metrics (Topological Subfamily Clustering)
 - Input tree path: `data/interim/IPR019888.tree`
-- Topological clades generated: 25
+- Topological clades generated (after min-size filter >=5): 44
+- Minimum clade size retained: 5
 - Distance threshold selection: adaptive search targeting 20-80 clades
-- Distance threshold used in latest rerun: 6.756665
+- Distance threshold used in latest rerun: 5.669654
 - Clade summary output: `results/topological_clustering/tree_clusters.csv`
 - Clade assignment output: `results/topological_clustering/tree_cluster_assignments.csv`
 - Dendrogram output: `results/topological_clustering/tree_dendrogram.svg`
+
+## Phase 4 Metrics (Ancestral Sequence Reconstruction)
+- ASR engine: IQ-TREE2 (`-asr`)
+- ASR run prefix: `data/interim/asr_run`
+- LCA ancestral sequences written: 44
+- LCA ancestral FASTA output: `data/interim/ancestral_sequences.fasta`
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -103,5 +116,9 @@
   - LCA identification per clade: complete
   - Topological dendrogram visualization: complete
 
-## Pending (Before Phase 4)
-- User review/approval of Phase 3 outputs, clade count, and clustering threshold strategy.
+- Phase 4 (Ancestral Sequence Reconstruction): complete for initial implementation, awaiting user review
+  - IQ-TREE ASR execution: complete
+  - LCA sequence extraction for valid clades: complete
+
+## Pending (Before Phase 5)
+- User review/approval of filtered clade set, dendrogram coloring, and Phase 4 ancestral sequence outputs.
