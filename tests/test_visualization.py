@@ -280,7 +280,7 @@ def test_plot_dendrogram_with_switches_writes_svg(tmp_path: Path) -> None:
         level="groups",
         output_svg=out_svg,
         title="Groups Dendrogram with Switches",
-        threshold=0.2,
+        color_threshold=0.2,
     )
 
     assert out_svg.exists()

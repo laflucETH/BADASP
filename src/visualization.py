@@ -478,7 +478,7 @@ def plot_dendrogram_with_switches(
     level: str,
     output_svg: Path,
     title: str,
-    threshold: float,
+    color_threshold: float,
 ) -> None:
     from src.tree_cluster import tree_to_linkage
 
@@ -500,7 +500,7 @@ def plot_dendrogram_with_switches(
         linkage_matrix,
         no_plot=True,
         no_labels=True,
-        color_threshold=threshold,
+        color_threshold=color_threshold,
         above_threshold_color="#666666",
     )
 
@@ -513,13 +513,16 @@ def plot_dendrogram_with_switches(
     assignments = pd.read_csv(assignments_path)
     cluster_members = assignments.groupby(id_col)["sequence_id"].apply(list).to_dict()
     name_to_index = {name: idx for idx, name in enumerate(labels)}
+    indexed_names = set(name_to_index)
 
     raw_pairwise = _load_pairwise_table(raw_pairwise_path)
-    switched = raw_pairwise[raw_pairwise["score"] > float(threshold)]
+    switch_threshold = float(np.percentile(raw_pairwise["score"].astype(float), 95)) if not raw_pairwise.empty else 0.0
+    switched = raw_pairwise[raw_pairwise["score"] > switch_threshold]
     pair_switch_counts = switched.groupby("pair").size().to_dict()
+    pairs_with_switches = [(pair, int(count)) for pair, count in pair_switch_counts.items() if int(count) > 0]
 
     node_switch_counts: Dict[int, int] = defaultdict(int)
-    for pair, count in pair_switch_counts.items():
+    for pair, count in pairs_with_switches:
         try:
             left_str, right_str = str(pair).split("-")
             left_id = int(left_str)
@@ -528,11 +531,23 @@ def plot_dendrogram_with_switches(
             continue
         if left_id not in cluster_members or right_id not in cluster_members:
             continue
-        combined_members = cluster_members[left_id] + cluster_members[right_id]
-        idx_set = frozenset(name_to_index[name] for name in combined_members if name in name_to_index)
+
+        pair_members = cluster_members[left_id] + cluster_members[right_id]
+        lca = tree.common_ancestor(pair_members)
+        lca_leaves = [leaf.name for leaf in lca.get_terminals() if leaf.name in indexed_names]
+        idx_set = frozenset(name_to_index[name] for name in lca_leaves)
         node_id = descendant_to_node.get(idx_set)
         if node_id is not None:
             node_switch_counts[node_id] += int(count)
+
+    mapped_coordinates = [
+        (x_by_node[node_id], y_by_node[node_id], node_switch_counts[node_id])
+        for node_id in node_switch_counts
+        if node_switch_counts[node_id] > 0
+    ]
+
+    print(f"Total pairs with switches > 0: {len(pairs_with_switches)}")
+    print(f"Total scatter points successfully mapped to coordinates: {len(mapped_coordinates)}")
 
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     palette = [plt.cm.tab20(i / 20) for i in range(20)] + [plt.cm.Set3(i / 12) for i in range(12)]
@@ -542,17 +557,16 @@ def plot_dendrogram_with_switches(
     dendrogram(
         linkage_matrix,
         no_labels=True,
-        color_threshold=threshold,
+        color_threshold=color_threshold,
         above_threshold_color="#666666",
     )
     set_link_color_palette(None)
 
-    if node_switch_counts:
-        node_ids = list(node_switch_counts.keys())
-        switch_values = np.array([node_switch_counts[node_id] for node_id in node_ids], dtype=float)
+    if mapped_coordinates:
+        switch_values = np.array([entry[2] for entry in mapped_coordinates], dtype=float)
         max_val = float(switch_values.max()) if len(switch_values) else 1.0
-        xs = [x_by_node[node_id] for node_id in node_ids]
-        ys = [y_by_node[node_id] for node_id in node_ids]
+        xs = [entry[0] for entry in mapped_coordinates]
+        ys = [entry[1] for entry in mapped_coordinates]
         sizes = [40.0 + (260.0 * (val / max_val)) for val in switch_values]
 
         scatter = plt.scatter(
@@ -597,7 +611,7 @@ def generate_dendrogram_switch_plots(
         level="groups",
         output_svg=output_groups_svg,
         title="Groups Dendrogram with Switch Events",
-        threshold=group_threshold,
+        color_threshold=group_threshold,
     )
     plot_dendrogram_with_switches(
         tree_path=tree_path,
@@ -606,7 +620,7 @@ def generate_dendrogram_switch_plots(
         level="families",
         output_svg=output_families_svg,
         title="Families Dendrogram with Switch Events",
-        threshold=family_threshold,
+        color_threshold=family_threshold,
     )
     plot_dendrogram_with_switches(
         tree_path=tree_path,
@@ -615,7 +629,7 @@ def generate_dendrogram_switch_plots(
         level="subfamilies",
         output_svg=output_subfamilies_svg,
         title="Subfamilies Dendrogram with Switch Events",
-        threshold=subfamily_threshold,
+        color_threshold=subfamily_threshold,
     )
 
 

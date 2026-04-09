@@ -163,6 +163,10 @@
   - `results/badasp_scoring/dendrogram_switches_groups.svg`
   - `results/badasp_scoring/dendrogram_switches_families.svg`
   - `results/badasp_scoring/dendrogram_switches_subfamilies.svg`
+  - Mapping validation (debug rerun):
+    - Groups: 4 pairs with switches, 4 mapped scatter coordinates
+    - Families: 23 pairs with switches, 21 mapped scatter coordinates
+    - Subfamilies: 78 pairs with switches, 72 mapped scatter coordinates
 - Distribution source for all score-density plots: raw pairwise score tables (`raw_pairwise_*.csv`), with 95th percentile lines derived from the same raw distributions
 - Test coverage: 32 tests passing in the current suite
 
