@@ -1,6 +1,7 @@
 import argparse
+from collections import defaultdict
 from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -8,7 +9,8 @@ from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from Bio import SeqIO
+from Bio import Phylo, SeqIO
+from Bio.Phylo.BaseTree import Clade, Tree
 from scipy.cluster.hierarchy import dendrogram, set_link_color_palette
 
 
@@ -32,6 +34,14 @@ def default_individual_badasp_plot_paths() -> Tuple[Path, Path, Path]:
         Path("results/badasp_scoring/badasp_score_distribution_groups.svg"),
         Path("results/badasp_scoring/badasp_score_distribution_families.svg"),
         Path("results/badasp_scoring/badasp_score_distribution_subfamilies.svg"),
+    )
+
+
+def default_tree_switch_plot_paths() -> Tuple[Path, Path, Path]:
+    return (
+        Path("results/badasp_scoring/tree_switches_groups.svg"),
+        Path("results/badasp_scoring/tree_switches_families.svg"),
+        Path("results/badasp_scoring/tree_switches_subfamilies.svg"),
     )
 
 
@@ -120,15 +130,24 @@ def _load_score_table(score_path: Path) -> pd.DataFrame:
     return df
 
 
+def _load_pairwise_table(pairwise_path: Path) -> pd.DataFrame:
+    df = pd.read_csv(pairwise_path)
+    required_columns = {"pair", "position", "score"}
+    missing = required_columns - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns in {pairwise_path}: {sorted(missing)}")
+    return df
+
+
 def plot_badasp_score_distribution(
-    score_path: Path,
+    raw_pairwise_path: Path,
     output_svg: Path,
     title: str,
     color: str,
 ) -> None:
-    df = _load_score_table(score_path)
-    scores = df["badasp_score"].astype(float).to_numpy()
-    threshold = float(df["global_threshold"].iloc[0])
+    df = _load_pairwise_table(raw_pairwise_path)
+    scores = df["score"].astype(float).to_numpy()
+    threshold = float(np.percentile(scores, 95)) if len(scores) else 0.0
 
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     plt.figure(figsize=(10, 6))
@@ -144,15 +163,15 @@ def plot_badasp_score_distribution(
 
 
 def plot_hierarchical_badasp_distributions(
-    group_scores: Path,
-    family_scores: Path,
-    subfamily_scores: Path,
+    group_pairwise: Path,
+    family_pairwise: Path,
+    subfamily_pairwise: Path,
     output_svg: Path,
 ) -> None:
     score_tables = {
-        "Groups": _load_score_table(group_scores),
-        "Families": _load_score_table(family_scores),
-        "Subfamilies": _load_score_table(subfamily_scores),
+        "Groups": _load_pairwise_table(group_pairwise),
+        "Families": _load_pairwise_table(family_pairwise),
+        "Subfamilies": _load_pairwise_table(subfamily_pairwise),
     }
     colors = {
         "Groups": "#1F77B4",
@@ -164,8 +183,8 @@ def plot_hierarchical_badasp_distributions(
     plt.figure(figsize=(11, 6))
 
     for label, df in score_tables.items():
-        scores = df["badasp_score"].astype(float).to_numpy()
-        threshold = float(df["global_threshold"].iloc[0])
+        scores = df["score"].astype(float).to_numpy()
+        threshold = float(np.percentile(scores, 95)) if len(scores) else 0.0
         sns.kdeplot(scores, label=label, color=colors[label], linewidth=2.0, fill=False)
         plt.axvline(threshold, color=colors[label], linestyle="--", linewidth=1.5, alpha=0.8)
 
@@ -218,30 +237,211 @@ def plot_hierarchical_switch_counts(
 
 
 def plot_individual_hierarchical_badasp_distributions(
-    group_scores: Path,
-    family_scores: Path,
-    subfamily_scores: Path,
+    group_pairwise: Path,
+    family_pairwise: Path,
+    subfamily_pairwise: Path,
     output_group_svg: Path,
     output_family_svg: Path,
     output_subfamily_svg: Path,
 ) -> None:
     plot_badasp_score_distribution(
-        score_path=group_scores,
+        raw_pairwise_path=group_pairwise,
         output_svg=output_group_svg,
         title="Groups BADASP Score Distribution",
         color="#1F77B4",
     )
     plot_badasp_score_distribution(
-        score_path=family_scores,
+        raw_pairwise_path=family_pairwise,
         output_svg=output_family_svg,
         title="Families BADASP Score Distribution",
         color="#D95F02",
     )
     plot_badasp_score_distribution(
-        score_path=subfamily_scores,
+        raw_pairwise_path=subfamily_pairwise,
         output_svg=output_subfamily_svg,
         title="Subfamilies BADASP Score Distribution",
         color="#2CA02C",
+    )
+
+
+def _ensure_tree_node_names(tree: Tree) -> None:
+    for idx, node in enumerate(tree.get_nonterminals(order="preorder"), start=1):
+        if not node.name:
+            node.name = f"InternalNode_{idx}"
+
+
+def _build_y_positions(tree: Tree) -> Dict[Clade, float]:
+    terminals = tree.get_terminals()
+    y_positions: Dict[Clade, float] = {leaf: float(i) for i, leaf in enumerate(reversed(terminals), start=1)}
+
+    def _assign(node: Clade) -> float:
+        if node in y_positions:
+            return y_positions[node]
+        child_ys = [_assign(child) for child in node.clades]
+        y_positions[node] = (min(child_ys) + max(child_ys)) / 2.0
+        return y_positions[node]
+
+    _assign(tree.root)
+    return y_positions
+
+
+def build_switch_node_map(
+    tree_path: Path,
+    assignments_path: Path,
+    raw_pairwise_path: Path,
+    level: str,
+) -> Dict[str, int]:
+    level_map = {
+        "groups": "group",
+        "families": "family",
+        "subfamilies": "subfamily",
+    }
+    if level not in level_map:
+        raise ValueError(f"Unsupported level: {level}")
+
+    singular = level_map[level]
+    id_col = f"{singular}_id"
+
+    tree = Phylo.read(str(tree_path), "newick")
+    _ensure_tree_node_names(tree)
+
+    assignments = pd.read_csv(assignments_path)
+    members_by_cluster = assignments.groupby(id_col)["sequence_id"].apply(list).to_dict()
+
+    raw_pairwise = _load_pairwise_table(raw_pairwise_path)
+    if raw_pairwise.empty:
+        return {}
+
+    threshold = float(np.percentile(raw_pairwise["score"].astype(float), 95))
+    switched = raw_pairwise[raw_pairwise["score"] > threshold]
+    pair_switch_counts = switched.groupby("pair").size().to_dict()
+
+    node_switch_counts: Dict[str, int] = defaultdict(int)
+    for pair, switch_count in pair_switch_counts.items():
+        try:
+            left_str, right_str = str(pair).split("-")
+            left_id = int(left_str)
+            right_id = int(right_str)
+        except ValueError:
+            continue
+        if left_id not in members_by_cluster or right_id not in members_by_cluster:
+            continue
+        pair_members = list(members_by_cluster[left_id]) + list(members_by_cluster[right_id])
+        lca = tree.common_ancestor(pair_members)
+        if not lca.name:
+            continue
+        node_switch_counts[lca.name] += int(switch_count)
+
+    return dict(node_switch_counts)
+
+
+def plot_tree_with_switches(
+    tree_path: Path,
+    node_switch_counts: Dict[str, int],
+    output_svg: Path,
+    title: str,
+) -> None:
+    tree = Phylo.read(str(tree_path), "newick")
+    _ensure_tree_node_names(tree)
+
+    depths = tree.depths()
+    if not max(depths.values()):
+        depths = tree.depths(unit_branch_lengths=True)
+    y_positions = _build_y_positions(tree)
+
+    fig, ax = plt.subplots(figsize=(14, 10))
+
+    def _draw(node: Clade) -> None:
+        x = depths[node]
+        y = y_positions[node]
+        for child in node.clades:
+            child_x = depths[child]
+            child_y = y_positions[child]
+            ax.plot([x, child_x], [child_y, child_y], color="#666666", linewidth=0.7)
+            ax.plot([x, x], [y, child_y], color="#666666", linewidth=0.7)
+            _draw(child)
+
+    _draw(tree.root)
+
+    switched_nodes = [(node, count) for node, count in node_switch_counts.items() if count > 0]
+    if switched_nodes:
+        node_lookup = {clade.name: clade for clade in tree.find_clades() if clade.name}
+        counts = np.array([count for _, count in switched_nodes], dtype=float)
+        max_count = float(counts.max()) if len(counts) else 1.0
+
+        xs = []
+        ys = []
+        sizes = []
+        colors = []
+        for node_name, count in switched_nodes:
+            if node_name not in node_lookup:
+                continue
+            clade = node_lookup[node_name]
+            xs.append(depths[clade])
+            ys.append(y_positions[clade])
+            sizes.append(30.0 + (220.0 * (count / max_count)))
+            colors.append(count)
+
+        scatter = ax.scatter(xs, ys, s=sizes, c=colors, cmap="OrRd", alpha=0.9, edgecolor="#222222", linewidth=0.3)
+        cbar = fig.colorbar(scatter, ax=ax, pad=0.02)
+        cbar.set_label("Switch count")
+
+    ax.set_title(title)
+    ax.set_xlabel("Branch length from root")
+    ax.set_ylabel("Taxa / internal nodes")
+    ax.set_yticks([])
+    output_svg.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_svg, format="svg")
+    plt.close(fig)
+
+
+def generate_tree_switch_plots(
+    rooted_tree_path: Path,
+    assignments_path: Path,
+    output_groups_svg: Path,
+    output_families_svg: Path,
+    output_subfamilies_svg: Path,
+    raw_pairwise_groups: Path,
+    raw_pairwise_families: Path,
+    raw_pairwise_subfamilies: Path,
+) -> None:
+    groups_map = build_switch_node_map(
+        tree_path=rooted_tree_path,
+        assignments_path=assignments_path,
+        raw_pairwise_path=raw_pairwise_groups,
+        level="groups",
+    )
+    families_map = build_switch_node_map(
+        tree_path=rooted_tree_path,
+        assignments_path=assignments_path,
+        raw_pairwise_path=raw_pairwise_families,
+        level="families",
+    )
+    subfamilies_map = build_switch_node_map(
+        tree_path=rooted_tree_path,
+        assignments_path=assignments_path,
+        raw_pairwise_path=raw_pairwise_subfamilies,
+        level="subfamilies",
+    )
+
+    plot_tree_with_switches(
+        tree_path=rooted_tree_path,
+        node_switch_counts=groups_map,
+        output_svg=output_groups_svg,
+        title="Switch Events on Tree: Groups",
+    )
+    plot_tree_with_switches(
+        tree_path=rooted_tree_path,
+        node_switch_counts=families_map,
+        output_svg=output_families_svg,
+        title="Switch Events on Tree: Families",
+    )
+    plot_tree_with_switches(
+        tree_path=rooted_tree_path,
+        node_switch_counts=subfamilies_map,
+        output_svg=output_subfamilies_svg,
+        title="Switch Events on Tree: Subfamilies",
     )
 
 
@@ -250,6 +450,7 @@ def main() -> None:
     default_length_out, default_gap_out, _ = default_plot_paths()
     default_hier_dist_out, default_hier_switch_out = default_hierarchical_badasp_plot_paths()
     default_group_dist_out, default_family_dist_out, default_subfamily_dist_out = default_individual_badasp_plot_paths()
+    default_tree_groups_out, default_tree_families_out, default_tree_subfamilies_out = default_tree_switch_plot_paths()
     parser.add_argument("--fasta", default=None, help="Input FASTA for length distribution plot.")
     parser.add_argument("--length-output", default=str(default_length_out))
     parser.add_argument("--msa", default=None, help="Input MSA FASTA for gap-per-column plot.")
@@ -257,11 +458,19 @@ def main() -> None:
     parser.add_argument("--group-scores", default="results/badasp_scoring/badasp_scores_groups.csv")
     parser.add_argument("--family-scores", default="results/badasp_scoring/badasp_scores_families.csv")
     parser.add_argument("--subfamily-scores", default="results/badasp_scoring/badasp_scores_subfamilies.csv")
+    parser.add_argument("--group-pairwise", default="results/badasp_scoring/raw_pairwise_groups.csv")
+    parser.add_argument("--family-pairwise", default="results/badasp_scoring/raw_pairwise_families.csv")
+    parser.add_argument("--subfamily-pairwise", default="results/badasp_scoring/raw_pairwise_subfamilies.csv")
+    parser.add_argument("--rooted-tree", default="results/topological_clustering/midpoint_rooted.tree")
+    parser.add_argument("--assignments", default="results/topological_clustering/tree_cluster_assignments.csv")
     parser.add_argument("--hierarchical-distribution-output", default=str(default_hier_dist_out))
     parser.add_argument("--hierarchical-switch-output", default=str(default_hier_switch_out))
     parser.add_argument("--group-distribution-output", default=str(default_group_dist_out))
     parser.add_argument("--family-distribution-output", default=str(default_family_dist_out))
     parser.add_argument("--subfamily-distribution-output", default=str(default_subfamily_dist_out))
+    parser.add_argument("--tree-switch-groups-output", default=str(default_tree_groups_out))
+    parser.add_argument("--tree-switch-families-output", default=str(default_tree_families_out))
+    parser.add_argument("--tree-switch-subfamilies-output", default=str(default_tree_subfamilies_out))
     parser.add_argument("--hierarchical-only", action="store_true")
     args = parser.parse_args()
 
@@ -273,11 +482,11 @@ def main() -> None:
         plot_gap_percentage_per_column(Path(args.msa), Path(args.gap_output))
         print(f"Saved gap profile: {args.gap_output}")
 
-    if Path(args.group_scores).exists() and Path(args.family_scores).exists() and Path(args.subfamily_scores).exists():
+    if Path(args.group_pairwise).exists() and Path(args.family_pairwise).exists() and Path(args.subfamily_pairwise).exists():
         plot_individual_hierarchical_badasp_distributions(
-            group_scores=Path(args.group_scores),
-            family_scores=Path(args.family_scores),
-            subfamily_scores=Path(args.subfamily_scores),
+            group_pairwise=Path(args.group_pairwise),
+            family_pairwise=Path(args.family_pairwise),
+            subfamily_pairwise=Path(args.subfamily_pairwise),
             output_group_svg=Path(args.group_distribution_output),
             output_family_svg=Path(args.family_distribution_output),
             output_subfamily_svg=Path(args.subfamily_distribution_output),
@@ -287,9 +496,9 @@ def main() -> None:
         print(f"Saved subfamily score distribution: {args.subfamily_distribution_output}")
 
         plot_hierarchical_badasp_distributions(
-            group_scores=Path(args.group_scores),
-            family_scores=Path(args.family_scores),
-            subfamily_scores=Path(args.subfamily_scores),
+            group_pairwise=Path(args.group_pairwise),
+            family_pairwise=Path(args.family_pairwise),
+            subfamily_pairwise=Path(args.subfamily_pairwise),
             output_svg=Path(args.hierarchical_distribution_output),
         )
         print(f"Saved hierarchical score distributions: {args.hierarchical_distribution_output}")
@@ -301,6 +510,20 @@ def main() -> None:
             output_svg=Path(args.hierarchical_switch_output),
         )
         print(f"Saved hierarchical switch counts: {args.hierarchical_switch_output}")
+
+        generate_tree_switch_plots(
+            rooted_tree_path=Path(args.rooted_tree),
+            assignments_path=Path(args.assignments),
+            output_groups_svg=Path(args.tree_switch_groups_output),
+            output_families_svg=Path(args.tree_switch_families_output),
+            output_subfamilies_svg=Path(args.tree_switch_subfamilies_output),
+            raw_pairwise_groups=Path(args.group_pairwise),
+            raw_pairwise_families=Path(args.family_pairwise),
+            raw_pairwise_subfamilies=Path(args.subfamily_pairwise),
+        )
+        print(f"Saved tree switches plot (groups): {args.tree_switch_groups_output}")
+        print(f"Saved tree switches plot (families): {args.tree_switch_families_output}")
+        print(f"Saved tree switches plot (subfamilies): {args.tree_switch_subfamilies_output}")
 
 
 if __name__ == "__main__":

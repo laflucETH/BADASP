@@ -225,32 +225,61 @@ def _resolve_hierarchical_lca_nodes(assignments: pd.DataFrame, tree: Tree) -> Di
     return resolved
 
 
-def _pairs_within_parent(assignments: pd.DataFrame, level: str, parent_col: Optional[str] = None) -> List[Tuple[int, int]]:
+def _nearest_sister_pairs_for_level(
+    assignments: pd.DataFrame,
+    level: str,
+    tree: Tree,
+    parent_col: Optional[str] = None,
+) -> List[Tuple[int, int]]:
     id_col, _ = _level_columns(assignments, level)
-    if parent_col is None:
-        ids = sorted(assignments[id_col].dropna().unique().tolist())
-        pairs = []
-        for i in range(len(ids)):
-            for j in range(i + 1, len(ids)):
-                pairs.append((int(ids[i]), int(ids[j])))
-        return pairs
+    members_by_cluster = assignments.groupby(id_col)["sequence_id"].apply(list).to_dict()
 
-    pairs: List[Tuple[int, int]] = []
-    for parent_value, group in assignments[[id_col, parent_col]].drop_duplicates().groupby(parent_col):
-        ids = sorted(group[id_col].dropna().unique().tolist())
-        for i in range(len(ids)):
-            for j in range(i + 1, len(ids)):
-                pairs.append((int(ids[i]), int(ids[j])))
-    return sorted(set(tuple(sorted(pair)) for pair in pairs))
+    cluster_to_parent: Dict[int, Optional[int]] = {}
+    if parent_col is None:
+        for cluster_id in members_by_cluster:
+            cluster_to_parent[int(cluster_id)] = None
+    else:
+        parent_lookup = assignments[[id_col, parent_col]].drop_duplicates().set_index(id_col)[parent_col].to_dict()
+        for cluster_id in members_by_cluster:
+            cluster_to_parent[int(cluster_id)] = int(parent_lookup[cluster_id])
+
+    pairs = set()
+    cluster_ids = sorted(int(cid) for cid in members_by_cluster.keys())
+
+    for cluster_id in cluster_ids:
+        parent_value = cluster_to_parent[cluster_id]
+        candidates = [
+            other_id
+            for other_id in cluster_ids
+            if other_id != cluster_id and cluster_to_parent[other_id] == parent_value
+        ]
+        if not candidates:
+            continue
+
+        cluster_node = tree.common_ancestor(members_by_cluster[cluster_id])
+        nearest_id = None
+        nearest_distance = float("inf")
+        for other_id in candidates:
+            other_node = tree.common_ancestor(members_by_cluster[other_id])
+            distance = float(tree.distance(cluster_node, other_node))
+            if distance < nearest_distance or (
+                distance == nearest_distance and (nearest_id is None or other_id < nearest_id)
+            ):
+                nearest_distance = distance
+                nearest_id = other_id
+
+        if nearest_id is not None:
+            pairs.add(tuple(sorted((cluster_id, nearest_id))))
+
+    return sorted(pairs)
 
 
 def build_hierarchical_sister_pairs(assignments: pd.DataFrame, tree_path: Path) -> Dict[str, List[Tuple[int, int]]]:
-    # The current hierarchy already encodes parent/child nesting, so sister-pairing is performed within each level.
-    _ = tree_path  # retained for API parity and future tree-aware refinement.
+    tree = Phylo.read(str(tree_path), "newick")
     return {
-        "groups": _pairs_within_parent(assignments, "group"),
-        "families": _pairs_within_parent(assignments, "family", parent_col="group_id"),
-        "subfamilies": _pairs_within_parent(assignments, "subfamily", parent_col="family_id"),
+        "groups": _nearest_sister_pairs_for_level(assignments, "group", tree),
+        "families": _nearest_sister_pairs_for_level(assignments, "family", tree, parent_col="group_id"),
+        "subfamilies": _nearest_sister_pairs_for_level(assignments, "subfamily", tree, parent_col="family_id"),
     }
 
 
@@ -362,7 +391,12 @@ def compute_multilevel_badasp_scores(
     assignments = pd.read_csv(assignments_path)
     ancestral_seqs = {rec.id: str(rec.seq) for rec in SeqIO.parse(ancestral_path, "fasta")}
     state_data = load_state_file(state_path)
-    tree = Phylo.read(str(tree_path), "newick")
+    topology_tree = Phylo.read(str(tree_path), "newick")
+
+    asr_tree = topology_tree
+    asr_tree_path = Path(state_path).with_suffix(".treefile")
+    if asr_tree_path.exists():
+        asr_tree = Phylo.read(str(asr_tree_path), "newick")
 
     filtered = assignments.copy()
     for level in ("group", "family", "subfamily"):
@@ -371,7 +405,7 @@ def compute_multilevel_badasp_scores(
         valid = counts[counts >= min_clade_size].index.tolist()
         filtered = filtered[filtered[id_col].isin(valid)]
 
-    resolved_lca_nodes = _resolve_hierarchical_lca_nodes(filtered, tree)
+    resolved_lca_nodes = _resolve_hierarchical_lca_nodes(filtered, asr_tree)
 
     results: Dict[str, Dict[str, object]] = {}
     hierarchical_pairs = build_hierarchical_sister_pairs(filtered, tree_path)
@@ -460,3 +494,5 @@ class BADASPCore:
             if payload["sdps"] is not None:
                 sdp_path = output_dir / f"badasp_sdps_{level}.csv"
                 payload["sdps"].to_csv(sdp_path, index=False)
+            pairwise_path = output_dir / f"raw_pairwise_{level}.csv"
+            payload["pairwise"].to_csv(pairwise_path, index=False)

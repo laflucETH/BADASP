@@ -136,6 +136,36 @@ def test_build_hierarchical_sister_pairs_respects_parent_constraints(sample_assi
         assert family_by_sub[sub_a] == family_by_sub[sub_b]
 
 
+def test_build_hierarchical_sister_pairs_avoids_all_vs_all_within_parent(temp_data_dir):
+    assignments_path = temp_data_dir / "assignments_three_families.csv"
+    tree_path = temp_data_dir / "three_families.tree"
+
+    pd.DataFrame(
+        {
+            "sequence_id": ["A1", "A2", "B1", "B2", "C1", "C2"],
+            "group_id": [1, 1, 1, 1, 1, 1],
+            "group_lca_node": ["G1", "G1", "G1", "G1", "G1", "G1"],
+            "family_id": [10, 10, 11, 11, 12, 12],
+            "family_lca_node": ["F10", "F10", "F11", "F11", "F12", "F12"],
+            "subfamily_id": [100, 100, 110, 110, 120, 120],
+            "subfamily_lca_node": ["S100", "S100", "S110", "S110", "S120", "S120"],
+        }
+    ).to_csv(assignments_path, index=False)
+
+    # F10 and F11 are nearest sisters; F12 is farther from both.
+    tree_path.write_text(
+        "(((A1:0.1,A2:0.1)S100:0.1,(B1:0.1,B2:0.1)S110:0.1)F11:0.1,(C1:0.1,C2:0.1)S120:0.6)Root;",
+        encoding="utf-8",
+    )
+
+    assignments = pd.read_csv(assignments_path)
+    pairs = build_hierarchical_sister_pairs(assignments, tree_path)
+
+    # Families in one parent with 3 clades would produce 3 pairs in all-vs-all.
+    # Nearest-sister logic should produce fewer unique pairs.
+    assert len(pairs["families"]) < 3
+
+
 def test_compute_multilevel_badasp_scores_structure(
     sample_alignment,
     sample_assignments,
@@ -204,3 +234,6 @@ def test_badasp_core_writes_three_level_outputs(
     assert (output_dir / "badasp_scores_groups.csv").exists()
     assert (output_dir / "badasp_scores_families.csv").exists()
     assert (output_dir / "badasp_scores_subfamilies.csv").exists()
+    assert (output_dir / "raw_pairwise_groups.csv").exists()
+    assert (output_dir / "raw_pairwise_families.csv").exists()
+    assert (output_dir / "raw_pairwise_subfamilies.csv").exists()

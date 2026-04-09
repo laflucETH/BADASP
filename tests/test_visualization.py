@@ -78,43 +78,37 @@ def test_plot_topological_dendrogram_writes_svg(tmp_path: Path) -> None:
 def test_plot_hierarchical_badasp_distributions_writes_svg(tmp_path: Path) -> None:
     from src.visualization import plot_hierarchical_badasp_distributions
 
-    group_scores = tmp_path / "groups.csv"
-    family_scores = tmp_path / "families.csv"
-    subfamily_scores = tmp_path / "subfamilies.csv"
+    group_pairwise = tmp_path / "raw_pairwise_groups.csv"
+    family_pairwise = tmp_path / "raw_pairwise_families.csv"
+    subfamily_pairwise = tmp_path / "raw_pairwise_subfamilies.csv"
     output_svg = tmp_path / "hierarchical_distributions.svg"
 
     pd.DataFrame(
         {
+            "pair": ["1-2", "1-2", "1-2"],
             "position": [1, 2, 3],
-            "max_score": [0.5, 1.0, 1.5],
-            "switch_count": [1, 2, 3],
-            "global_threshold": [1.2, 1.2, 1.2],
-            "badasp_score": [0.5, 1.0, 1.5],
+            "score": [0.5, 1.0, 1.5],
         }
-    ).to_csv(group_scores, index=False)
+    ).to_csv(group_pairwise, index=False)
     pd.DataFrame(
         {
+            "pair": ["3-4", "3-4", "3-4"],
             "position": [1, 2, 3],
-            "max_score": [0.2, 0.7, 1.1],
-            "switch_count": [0, 1, 2],
-            "global_threshold": [0.9, 0.9, 0.9],
-            "badasp_score": [0.2, 0.7, 1.1],
+            "score": [0.2, 0.7, 1.1],
         }
-    ).to_csv(family_scores, index=False)
+    ).to_csv(family_pairwise, index=False)
     pd.DataFrame(
         {
+            "pair": ["5-6", "5-6", "5-6"],
             "position": [1, 2, 3],
-            "max_score": [0.1, 0.4, 0.9],
-            "switch_count": [2, 1, 0],
-            "global_threshold": [0.6, 0.6, 0.6],
-            "badasp_score": [0.1, 0.4, 0.9],
+            "score": [0.1, 0.4, 0.9],
         }
-    ).to_csv(subfamily_scores, index=False)
+    ).to_csv(subfamily_pairwise, index=False)
 
     plot_hierarchical_badasp_distributions(
-        group_scores=group_scores,
-        family_scores=family_scores,
-        subfamily_scores=subfamily_scores,
+        group_pairwise=group_pairwise,
+        family_pairwise=family_pairwise,
+        subfamily_pairwise=subfamily_pairwise,
         output_svg=output_svg,
     )
 
@@ -172,21 +166,19 @@ def test_plot_hierarchical_switch_counts_writes_svg(tmp_path: Path) -> None:
 def test_plot_badasp_score_distribution_writes_svg(tmp_path: Path) -> None:
     from src.visualization import plot_badasp_score_distribution
 
-    scores_csv = tmp_path / "badasp_scores_groups.csv"
+    raw_pairwise_csv = tmp_path / "raw_pairwise_groups.csv"
     output_svg = tmp_path / "badasp_score_distribution_groups.svg"
 
     pd.DataFrame(
         {
+            "pair": ["1-2", "1-2", "1-2", "1-2"],
             "position": [1, 2, 3, 4],
-            "max_score": [0.5, 1.0, 1.5, 2.0],
-            "switch_count": [0, 1, 2, 3],
-            "global_threshold": [1.25, 1.25, 1.25, 1.25],
-            "badasp_score": [0.5, 1.0, 1.5, 2.0],
+            "score": [0.5, 1.0, 1.5, 2.0],
         }
-    ).to_csv(scores_csv, index=False)
+    ).to_csv(raw_pairwise_csv, index=False)
 
     plot_badasp_score_distribution(
-        score_path=scores_csv,
+        raw_pairwise_path=raw_pairwise_csv,
         output_svg=output_svg,
         title="Groups BADASP Score Distribution",
         color="#1F77B4",
@@ -194,3 +186,60 @@ def test_plot_badasp_score_distribution_writes_svg(tmp_path: Path) -> None:
 
     assert output_svg.exists()
     assert output_svg.stat().st_size > 0
+
+
+def test_build_switch_node_map_counts_threshold_exceeding_events(tmp_path: Path) -> None:
+    from src.visualization import build_switch_node_map
+
+    tree_path = tmp_path / "tree.nwk"
+    assignments_path = tmp_path / "assignments.csv"
+    pairwise_path = tmp_path / "raw_pairwise_groups.csv"
+
+    tree_path.write_text("((A:0.1,B:0.1)N1:0.2,(C:0.1,D:0.1)N2:0.2)Root;\n", encoding="utf-8")
+    pd.DataFrame(
+        {
+            "sequence_id": ["A", "B", "C", "D"],
+            "group_id": [1, 1, 2, 2],
+            "group_lca_node": ["N1", "N1", "N2", "N2"],
+            "family_id": [10, 10, 20, 20],
+            "family_lca_node": ["N1", "N1", "N2", "N2"],
+            "subfamily_id": [100, 100, 200, 200],
+            "subfamily_lca_node": ["N1", "N1", "N2", "N2"],
+        }
+    ).to_csv(assignments_path, index=False)
+    pd.DataFrame(
+        {
+            "pair": ["1-2", "1-2", "1-2", "1-2"],
+            "position": [1, 2, 3, 4],
+            "score": [0.1, 0.2, 0.3, 10.0],
+        }
+    ).to_csv(pairwise_path, index=False)
+
+    node_switches = build_switch_node_map(
+        tree_path=tree_path,
+        assignments_path=assignments_path,
+        raw_pairwise_path=pairwise_path,
+        level="groups",
+    )
+
+    assert node_switches
+    assert sum(node_switches.values()) == 1
+
+
+def test_plot_tree_with_switches_writes_svg(tmp_path: Path) -> None:
+    from src.visualization import plot_tree_with_switches
+
+    tree_path = tmp_path / "tree.nwk"
+    out_svg = tmp_path / "tree_switches.svg"
+
+    tree_path.write_text("((A:0.1,B:0.1)N1:0.2,(C:0.1,D:0.1)N2:0.2)Root;\n", encoding="utf-8")
+
+    plot_tree_with_switches(
+        tree_path=tree_path,
+        node_switch_counts={"N1": 2, "N2": 5},
+        output_svg=out_svg,
+        title="Switch Events on Tree",
+    )
+
+    assert out_svg.exists()
+    assert out_svg.stat().st_size > 0

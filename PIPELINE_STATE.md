@@ -133,7 +133,7 @@
 ## Phase 5 Metrics (Restricted BADASP Scoring)
 - Implementation: TDD-first with `src/badasp_core.py` and `tests/test_badasp_core.py` for the multilevel hierarchy contract
 - Method: three-level BADASP scoring for group, family, and subfamily comparisons
-  - Sister-pairing: level-specific sister-clade events, nested within parent hierarchy constraints
+  - Sister-pairing: strict nearest phylogenetic sister-clade events only (topology-driven), restricted by parent hierarchy constraints
   - RC (Recent Conservation): average BLOSUM62-based similarity across the compared clades
   - AC (Ancestral Conservation): binary identical/different call between ancestral residues (1 or -1)
   - p(AC): posterior probability from the IQ-TREE state file
@@ -144,11 +144,14 @@
   - `results/badasp_scoring/badasp_scores_groups.csv`
   - `results/badasp_scoring/badasp_scores_families.csv`
   - `results/badasp_scoring/badasp_scores_subfamilies.csv`
-- Test coverage: 25 tests passing in the current suite
-- Hierarchical rerun thresholds:
-  - Groups: 1.354551, top SDP position 12 (switch_count = 11, max_score = 1.446354)
-  - Families: 1.366446, top SDP position 27 (switch_count = 56, max_score = 1.631724)
-  - Subfamilies: 1.384612, top SDP position 44 (switch_count = 141, max_score = 1.666147)
+- Raw pairwise score exports:
+  - `results/badasp_scoring/raw_pairwise_groups.csv`
+  - `results/badasp_scoring/raw_pairwise_families.csv`
+  - `results/badasp_scoring/raw_pairwise_subfamilies.csv`
+- Corrected rerun thresholds and max switches:
+  - Groups: threshold 1.312925, max switch_count 2 at position 123 (max_score = 1.454876)
+  - Families: threshold 1.272619, max switch_count 9 at position 46 (max_score = 1.581377)
+  - Subfamilies: threshold 1.290963, max switch_count 18 at position 44 (max_score = 1.563795)
 - Hierarchical comparative visualizations:
   - Score distributions: `results/badasp_scoring/hierarchical_distributions.svg`
   - Switch counts across the alignment: `results/badasp_scoring/hierarchical_switch_counts.svg`
@@ -156,7 +159,12 @@
   - `results/badasp_scoring/badasp_score_distribution_groups.svg`
   - `results/badasp_scoring/badasp_score_distribution_families.svg`
   - `results/badasp_scoring/badasp_score_distribution_subfamilies.svg`
-- Test coverage: 29 tests passing in the current suite
+- Tree switch-event visualizations (Supplementary S2-style):
+  - `results/badasp_scoring/tree_switches_groups.svg`
+  - `results/badasp_scoring/tree_switches_families.svg`
+  - `results/badasp_scoring/tree_switches_subfamilies.svg`
+- Distribution source for all score-density plots: raw pairwise score tables (`raw_pairwise_*.csv`), with 95th percentile lines derived from the same raw distributions
+- Test coverage: 32 tests passing in the current suite
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -182,11 +190,12 @@
   - TDD-first core implementation: complete
   - Multilevel hierarchy refactor (Groups/Families/Subfamilies): complete
   - Hierarchical ASR node extraction support: complete
-  - Sister-clade switch-count aggregation: complete
+  - Strict nearest-sister switch-count aggregation: complete
   - BADASP score calculation: complete
   - Hierarchical comparative visualizations: complete
   - Standalone per-level score distribution plots: complete
-  - All tests passing: complete (29/29)
+  - Node-mapped tree switch visualizations: complete
+  - All tests passing: complete (32/32)
 
 ## Pending (Before Phase 6)
 - User review/approval of Phase 5 BADASP outputs and SDP table
