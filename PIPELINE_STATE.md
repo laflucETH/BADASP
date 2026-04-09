@@ -113,25 +113,30 @@
 - Refresh status: completed after rooted-tree and 34-clade Phase 3 rerun.
 
 ## Phase 5 Metrics (Restricted BADASP Scoring)
-- Implementation: TDD-first with `src/badasp_core.py` and `tests/test_badasp_core.py` (11 new tests)
-- Method: Score = RC - (AC * p(AC)); restricted to deep clade LCA divergences only
-  - RC (Recent Conservation): BLOSUM62-based continuous similarity across modern sequences within each clade
+- Implementation: TDD-first with `src/badasp_core.py` and `tests/test_badasp_core.py` (15 Phase 5 tests)
+- Method: unique sister-clade event scoring with global pooled thresholding and switch counting
+  - Sister clade pairing: nearest sister clade pairs from the phylogenetic tree, deduplicated so each divergence event is scored once
+  - RC (Recent Conservation): average BLOSUM62-based continuous similarity across the two sister clades
   - AC (Ancestral Conservation): binary identical/different call between sister clade ancestral residues (1 or -1)
   - p(AC): posterior probability from IQ-TREE state file
+  - Score: `RC - (AC * p(AC))`
+  - Global threshold: 95th percentile computed from the pooled set of all sister-pair / position scores
+  - Switch count: per-position count of sister-pair scores strictly greater than the global threshold
 - LCA node mapping: automated tree traversal to map Phase 3 clade IDs to Phase 4 ASR tree nodes
 - Alignment positions scored: 165 (full trimmed alignment length)
 - BADASP score statistics:
-  - Mean: 0.2779
-  - Median: 0.3783
-  - Std. dev: 0.3948
-  - Range: [-0.5475, 1.0036]
-- 95th percentile threshold: 0.802809
-- Specificity Determining Positions (SDPs) identified: **9 positions**
+  - Mean: 1.1861
+  - Median: 1.2900
+  - Std. dev: 0.4055
+  - Range: [-0.4654, 1.6012]
+- 95th percentile threshold: 1.254422
+- Specificity Determining Positions (SDPs) identified: **1 position**
+- Highest switch-count SDP: position 46 (switch_count = 10, max_score = 1.581841)
 - Outputs:
-  - Full scores: `results/badasp_scoring/badasp_scores.csv` (165 positions × 5 columns)
-  - SDP table: `results/badasp_scoring/badasp_sdps.csv` (9 positions × 5 columns)
+  - Full scores: `results/badasp_scoring/badasp_scores.csv` (165 positions × 5 columns; includes `max_score`, `switch_count`, `global_threshold`)
+  - SDP table: `results/badasp_scoring/badasp_sdps.csv` (1 position × 5 columns)
   - Distribution plot: `results/badasp_scoring/badasp_score_distribution.svg` (publication-ready SVG)
-- Test coverage: 29 tests passing (18 existing + 11 new Phase 5 tests)
+- Test coverage: 33 tests passing (18 existing + 15 Phase 5 tests)
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -156,11 +161,13 @@
 - **Phase 5 (Restricted BADASP Scoring): complete, awaiting user review**
   - TDD-first core implementation: complete
   - LCA node mapping (Phase 3 <-> Phase 4): complete
+  - Sister-clade switch-count aggregation: complete
   - BADASP score calculation: complete
-  - SDP identification (95th percentile): complete
+  - SDP identification (highest switch count after global 95th percentile threshold): complete
   - Score distribution visualization: complete
-  - All tests passing: complete (29/29)
+  - All tests passing: complete (33/33)
 
 ## Pending (Before Phase 6)
+- Refactoring Phases 3, 4, and 5 to support 3-level hierarchical specificity analysis (Groups, Families, Subfamilies) mirroring Bradley & Beltrao (2019) kinase study design.
 - User review/approval of Phase 5 BADASP outputs and SDP table
 - Decision on Phase 6: Structural & Statistical Mapping of SDPs to PDB structures

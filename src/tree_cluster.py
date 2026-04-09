@@ -85,6 +85,28 @@ def _resolve_lca_label(tree: Tree, members: List[str]) -> str:
     return "InternalNode_unknown"
 
 
+def _build_level_assignments(
+    labels: Sequence[str],
+    linkage_rows: Sequence[Sequence[float]],
+    threshold: float,
+    min_clade_size: int,
+) -> Dict[int, List[str]]:
+    cluster_ids = [int(x) for x in fcluster(linkage_rows, t=threshold, criterion="distance")]
+    assignments: Dict[int, List[str]] = {}
+    for terminal_name, cluster_id in zip(labels, cluster_ids):
+        assignments.setdefault(cluster_id, []).append(terminal_name)
+    filtered = {cid: members for cid, members in assignments.items() if len(members) >= min_clade_size}
+    return filtered
+
+
+def _level_membership_map(assignments: Dict[int, List[str]]) -> Dict[str, int]:
+    mapping: Dict[str, int] = {}
+    for cluster_id, members in assignments.items():
+        for terminal in members:
+            mapping[terminal] = cluster_id
+    return mapping
+
+
 def _clade_count_at_threshold(linkage_rows: Sequence[Sequence[float]], threshold: float) -> int:
     cluster_ids = fcluster(linkage_rows, t=threshold, criterion="distance")
     return len(set(int(x) for x in cluster_ids))
@@ -154,12 +176,18 @@ def cluster_tree_topologically(
     clusters_output: Path,
     assignments_output: Path,
     rooted_tree_output: Optional[Path] = None,
-    distance_threshold: Optional[float] = None,
-    target_min_clades: int = 20,
-    target_max_clades: int = 80,
+    group_distance_threshold: Optional[float] = None,
+    family_distance_threshold: Optional[float] = None,
+    subfamily_distance_threshold: Optional[float] = None,
+    group_target_min_clades: int = 5,
+    group_target_max_clades: int = 10,
+    family_target_min_clades: int = 30,
+    family_target_max_clades: int = 40,
+    subfamily_target_min_clades: int = 100,
+    subfamily_target_max_clades: int = 150,
     min_clade_size: int = 5,
     dendrogram_output: Optional[Path] = None,
-) -> Tuple[int, float]:
+) -> Tuple[Dict[str, int], Dict[str, float]]:
     tree = Phylo.read(str(tree_path), "newick")
     # Midpoint-root FastTree output to avoid topology distortions from unrooted trees.
     tree.root_at_midpoint()
@@ -170,47 +198,112 @@ def cluster_tree_topologically(
 
     labels, linkage_rows = tree_to_linkage(tree)
 
-    if distance_threshold is None:
-        distance_threshold = choose_distance_threshold(
+    if group_distance_threshold is None:
+        group_distance_threshold = choose_distance_threshold(
             linkage_rows=linkage_rows,
-            target_min_clades=target_min_clades,
-            target_max_clades=target_max_clades,
+            target_min_clades=group_target_min_clades,
+            target_max_clades=group_target_max_clades,
             min_clade_size=min_clade_size,
         )
 
-    cluster_ids = [int(x) for x in fcluster(linkage_rows, t=distance_threshold, criterion="distance")]
+    if family_distance_threshold is None:
+        family_distance_threshold = choose_distance_threshold(
+            linkage_rows=linkage_rows,
+            target_min_clades=family_target_min_clades,
+            target_max_clades=family_target_max_clades,
+            min_clade_size=min_clade_size,
+        )
 
-    assignments: Dict[int, List[str]] = {}
-    for terminal_name, cluster_id in zip(labels, cluster_ids):
-        assignments.setdefault(cluster_id, []).append(terminal_name)
+    if subfamily_distance_threshold is None:
+        subfamily_distance_threshold = choose_distance_threshold(
+            linkage_rows=linkage_rows,
+            target_min_clades=subfamily_target_min_clades,
+            target_max_clades=subfamily_target_max_clades,
+            min_clade_size=min_clade_size,
+        )
 
-    filtered_assignments = {
-        cluster_id: members for cluster_id, members in assignments.items() if len(members) >= min_clade_size
-    }
-    if not filtered_assignments:
+    # Ensure deep-to-shallow ordering by distance threshold.
+    ordered_thresholds = sorted(
+        [group_distance_threshold, family_distance_threshold, subfamily_distance_threshold], reverse=True
+    )
+    group_distance_threshold, family_distance_threshold, subfamily_distance_threshold = ordered_thresholds
+
+    group_assignments = _build_level_assignments(labels, linkage_rows, group_distance_threshold, min_clade_size)
+    family_assignments = _build_level_assignments(labels, linkage_rows, family_distance_threshold, min_clade_size)
+    subfamily_assignments = _build_level_assignments(labels, linkage_rows, subfamily_distance_threshold, min_clade_size)
+
+    if not group_assignments or not family_assignments or not subfamily_assignments:
         raise ValueError("No clades survive the minimum size threshold.")
+
+    group_map = _level_membership_map(group_assignments)
+    family_map = _level_membership_map(family_assignments)
+    subfamily_map = _level_membership_map(subfamily_assignments)
+
+    # Keep only sequences mapped in all three levels.
+    sequence_ids = sorted(set(group_map) & set(family_map) & set(subfamily_map))
+    if not sequence_ids:
+        raise ValueError("No sequences overlap across group/family/subfamily levels.")
+
+    group_lca = {cid: _resolve_lca_label(tree, members) for cid, members in group_assignments.items()}
+    family_lca = {cid: _resolve_lca_label(tree, members) for cid, members in family_assignments.items()}
+    subfamily_lca = {cid: _resolve_lca_label(tree, members) for cid, members in subfamily_assignments.items()}
 
     assignments_output.parent.mkdir(parents=True, exist_ok=True)
     with assignments_output.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["terminal_name", "clade_id"])
-        for cluster_id in sorted(filtered_assignments):
-            for terminal in sorted(filtered_assignments[cluster_id]):
-                writer.writerow([terminal, cluster_id])
+        writer.writerow(
+            [
+                "sequence_id",
+                "group_id",
+                "group_lca_node",
+                "family_id",
+                "family_lca_node",
+                "subfamily_id",
+                "subfamily_lca_node",
+            ]
+        )
+        for sequence_id in sequence_ids:
+            gid = group_map[sequence_id]
+            fid = family_map[sequence_id]
+            sid = subfamily_map[sequence_id]
+            writer.writerow(
+                [
+                    sequence_id,
+                    gid,
+                    group_lca[gid],
+                    fid,
+                    family_lca[fid],
+                    sid,
+                    subfamily_lca[sid],
+                ]
+            )
 
     clusters_output.parent.mkdir(parents=True, exist_ok=True)
     with clusters_output.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["clade_id", "member_count", "lca_node"])
-        for cluster_id in sorted(filtered_assignments):
-            members = filtered_assignments[cluster_id]
-            lca_name = _resolve_lca_label(tree, members)
-            writer.writerow([cluster_id, len(members), lca_name])
+        writer.writerow(["level", "cluster_id", "member_count", "lca_node"])
+        for level_name, assignments, lca_map in (
+            ("group", group_assignments, group_lca),
+            ("family", family_assignments, family_lca),
+            ("subfamily", subfamily_assignments, subfamily_lca),
+        ):
+            for cluster_id in sorted(assignments):
+                writer.writerow([level_name, cluster_id, len(assignments[cluster_id]), lca_map[cluster_id]])
 
     if dendrogram_output is not None:
-        plot_topological_dendrogram(linkage_rows, dendrogram_output, color_threshold=distance_threshold)
+        plot_topological_dendrogram(linkage_rows, dendrogram_output, color_threshold=family_distance_threshold)
 
-    return len(filtered_assignments), float(distance_threshold)
+    level_counts = {
+        "group": len(group_assignments),
+        "family": len(family_assignments),
+        "subfamily": len(subfamily_assignments),
+    }
+    level_thresholds = {
+        "group": float(group_distance_threshold),
+        "family": float(family_distance_threshold),
+        "subfamily": float(subfamily_distance_threshold),
+    }
+    return level_counts, level_thresholds
 
 
 def main() -> None:
@@ -219,26 +312,45 @@ def main() -> None:
     parser.add_argument("--clusters-output", default="results/topological_clustering/tree_clusters.csv")
     parser.add_argument("--assignments-output", default="results/topological_clustering/tree_cluster_assignments.csv")
     parser.add_argument("--rooted-tree-output", default="results/topological_clustering/midpoint_rooted.tree")
-    parser.add_argument("--distance-threshold", type=float, default=None)
-    parser.add_argument("--target-min-clades", type=int, default=20)
-    parser.add_argument("--target-max-clades", type=int, default=80)
+    parser.add_argument("--group-distance-threshold", type=float, default=None)
+    parser.add_argument("--family-distance-threshold", type=float, default=None)
+    parser.add_argument("--subfamily-distance-threshold", type=float, default=None)
+    parser.add_argument("--group-target-min-clades", type=int, default=5)
+    parser.add_argument("--group-target-max-clades", type=int, default=10)
+    parser.add_argument("--family-target-min-clades", type=int, default=30)
+    parser.add_argument("--family-target-max-clades", type=int, default=40)
+    parser.add_argument("--subfamily-target-min-clades", type=int, default=100)
+    parser.add_argument("--subfamily-target-max-clades", type=int, default=150)
     parser.add_argument("--min-clade-size", type=int, default=5)
     parser.add_argument("--dendrogram-output", default="results/topological_clustering/tree_dendrogram.svg")
     args = parser.parse_args()
 
-    clade_count, used_threshold = cluster_tree_topologically(
+    level_counts, level_thresholds = cluster_tree_topologically(
         tree_path=Path(args.tree),
         clusters_output=Path(args.clusters_output),
         assignments_output=Path(args.assignments_output),
         rooted_tree_output=Path(args.rooted_tree_output),
-        distance_threshold=args.distance_threshold,
-        target_min_clades=args.target_min_clades,
-        target_max_clades=args.target_max_clades,
+        group_distance_threshold=args.group_distance_threshold,
+        family_distance_threshold=args.family_distance_threshold,
+        subfamily_distance_threshold=args.subfamily_distance_threshold,
+        group_target_min_clades=args.group_target_min_clades,
+        group_target_max_clades=args.group_target_max_clades,
+        family_target_min_clades=args.family_target_min_clades,
+        family_target_max_clades=args.family_target_max_clades,
+        subfamily_target_min_clades=args.subfamily_target_min_clades,
+        subfamily_target_max_clades=args.subfamily_target_max_clades,
         min_clade_size=args.min_clade_size,
         dendrogram_output=Path(args.dendrogram_output),
     )
-    print(f"Topological clades generated: {clade_count}")
-    print(f"Distance threshold used: {used_threshold:.6f}")
+    print(f"Groups generated: {level_counts['group']}")
+    print(f"Families generated: {level_counts['family']}")
+    print(f"Subfamilies generated: {level_counts['subfamily']}")
+    print(
+        "Thresholds used: "
+        f"group={level_thresholds['group']:.6f}, "
+        f"family={level_thresholds['family']:.6f}, "
+        f"subfamily={level_thresholds['subfamily']:.6f}"
+    )
 
 
 if __name__ == "__main__":
