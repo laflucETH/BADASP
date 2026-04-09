@@ -445,6 +445,180 @@ def generate_tree_switch_plots(
     )
 
 
+def _compute_dendrogram_node_coords(
+    linkage_matrix: np.ndarray,
+    leaves_order: List[int],
+) -> Tuple[Dict[int, float], Dict[int, float], Dict[int, frozenset]]:
+    leaf_x = {leaf_idx: 5.0 + (10.0 * rank) for rank, leaf_idx in enumerate(leaves_order)}
+    x_by_node: Dict[int, float] = {}
+    y_by_node: Dict[int, float] = {}
+    descendants: Dict[int, frozenset] = {}
+
+    n_leaves = linkage_matrix.shape[0] + 1
+    for i in range(n_leaves):
+        x_by_node[i] = leaf_x[i]
+        y_by_node[i] = 0.0
+        descendants[i] = frozenset({i})
+
+    for i, row in enumerate(linkage_matrix):
+        left = int(row[0])
+        right = int(row[1])
+        node_id = n_leaves + i
+        x_by_node[node_id] = (x_by_node[left] + x_by_node[right]) / 2.0
+        y_by_node[node_id] = float(row[2])
+        descendants[node_id] = descendants[left] | descendants[right]
+
+    return x_by_node, y_by_node, descendants
+
+
+def plot_dendrogram_with_switches(
+    tree_path: Path,
+    assignments_path: Path,
+    raw_pairwise_path: Path,
+    level: str,
+    output_svg: Path,
+    title: str,
+    threshold: float,
+) -> None:
+    from src.tree_cluster import tree_to_linkage
+
+    level_map = {
+        "groups": "group",
+        "families": "family",
+        "subfamilies": "subfamily",
+    }
+    if level not in level_map:
+        raise ValueError(f"Unsupported level: {level}")
+    singular = level_map[level]
+    id_col = f"{singular}_id"
+
+    tree = Phylo.read(str(tree_path), "newick")
+    labels, linkage_rows = tree_to_linkage(tree)
+    linkage_matrix = np.asarray(linkage_rows, dtype=float)
+
+    dendro_meta = dendrogram(
+        linkage_matrix,
+        no_plot=True,
+        no_labels=True,
+        color_threshold=threshold,
+        above_threshold_color="#666666",
+    )
+
+    x_by_node, y_by_node, descendants = _compute_dendrogram_node_coords(
+        linkage_matrix=linkage_matrix,
+        leaves_order=[int(idx) for idx in dendro_meta["leaves"]],
+    )
+    descendant_to_node = {desc: node_id for node_id, desc in descendants.items() if node_id >= len(labels)}
+
+    assignments = pd.read_csv(assignments_path)
+    cluster_members = assignments.groupby(id_col)["sequence_id"].apply(list).to_dict()
+    name_to_index = {name: idx for idx, name in enumerate(labels)}
+
+    raw_pairwise = _load_pairwise_table(raw_pairwise_path)
+    switched = raw_pairwise[raw_pairwise["score"] > float(threshold)]
+    pair_switch_counts = switched.groupby("pair").size().to_dict()
+
+    node_switch_counts: Dict[int, int] = defaultdict(int)
+    for pair, count in pair_switch_counts.items():
+        try:
+            left_str, right_str = str(pair).split("-")
+            left_id = int(left_str)
+            right_id = int(right_str)
+        except ValueError:
+            continue
+        if left_id not in cluster_members or right_id not in cluster_members:
+            continue
+        combined_members = cluster_members[left_id] + cluster_members[right_id]
+        idx_set = frozenset(name_to_index[name] for name in combined_members if name in name_to_index)
+        node_id = descendant_to_node.get(idx_set)
+        if node_id is not None:
+            node_switch_counts[node_id] += int(count)
+
+    output_svg.parent.mkdir(parents=True, exist_ok=True)
+    palette = [plt.cm.tab20(i / 20) for i in range(20)] + [plt.cm.Set3(i / 12) for i in range(12)]
+    set_link_color_palette([mcolors.to_hex(c) for c in palette])
+
+    plt.figure(figsize=(12, 6))
+    dendrogram(
+        linkage_matrix,
+        no_labels=True,
+        color_threshold=threshold,
+        above_threshold_color="#666666",
+    )
+    set_link_color_palette(None)
+
+    if node_switch_counts:
+        node_ids = list(node_switch_counts.keys())
+        switch_values = np.array([node_switch_counts[node_id] for node_id in node_ids], dtype=float)
+        max_val = float(switch_values.max()) if len(switch_values) else 1.0
+        xs = [x_by_node[node_id] for node_id in node_ids]
+        ys = [y_by_node[node_id] for node_id in node_ids]
+        sizes = [40.0 + (260.0 * (val / max_val)) for val in switch_values]
+
+        scatter = plt.scatter(
+            xs,
+            ys,
+            c=switch_values,
+            s=sizes,
+            cmap="OrRd",
+            edgecolor="#222222",
+            linewidth=0.4,
+            alpha=0.9,
+            zorder=5,
+        )
+        cbar = plt.colorbar(scatter, pad=0.01)
+        cbar.set_label("Switch count")
+
+    plt.title(title)
+    plt.xlabel("Collapsed Leaf Groups")
+    plt.ylabel("Cophenetic Distance")
+    plt.tight_layout()
+    plt.savefig(output_svg, format="svg")
+    plt.close()
+
+
+def generate_dendrogram_switch_plots(
+    tree_path: Path,
+    assignments_path: Path,
+    raw_pairwise_groups: Path,
+    raw_pairwise_families: Path,
+    raw_pairwise_subfamilies: Path,
+    output_groups_svg: Path,
+    output_families_svg: Path,
+    output_subfamilies_svg: Path,
+    group_threshold: float,
+    family_threshold: float,
+    subfamily_threshold: float,
+) -> None:
+    plot_dendrogram_with_switches(
+        tree_path=tree_path,
+        assignments_path=assignments_path,
+        raw_pairwise_path=raw_pairwise_groups,
+        level="groups",
+        output_svg=output_groups_svg,
+        title="Groups Dendrogram with Switch Events",
+        threshold=group_threshold,
+    )
+    plot_dendrogram_with_switches(
+        tree_path=tree_path,
+        assignments_path=assignments_path,
+        raw_pairwise_path=raw_pairwise_families,
+        level="families",
+        output_svg=output_families_svg,
+        title="Families Dendrogram with Switch Events",
+        threshold=family_threshold,
+    )
+    plot_dendrogram_with_switches(
+        tree_path=tree_path,
+        assignments_path=assignments_path,
+        raw_pairwise_path=raw_pairwise_subfamilies,
+        level="subfamilies",
+        output_svg=output_subfamilies_svg,
+        title="Subfamilies Dendrogram with Switch Events",
+        threshold=subfamily_threshold,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="QC and hierarchical BADASP visualizations.")
     default_length_out, default_gap_out, _ = default_plot_paths()
@@ -471,6 +645,12 @@ def main() -> None:
     parser.add_argument("--tree-switch-groups-output", default=str(default_tree_groups_out))
     parser.add_argument("--tree-switch-families-output", default=str(default_tree_families_out))
     parser.add_argument("--tree-switch-subfamilies-output", default=str(default_tree_subfamilies_out))
+    parser.add_argument("--dendrogram-switch-groups-output", default="results/badasp_scoring/dendrogram_switches_groups.svg")
+    parser.add_argument("--dendrogram-switch-families-output", default="results/badasp_scoring/dendrogram_switches_families.svg")
+    parser.add_argument("--dendrogram-switch-subfamilies-output", default="results/badasp_scoring/dendrogram_switches_subfamilies.svg")
+    parser.add_argument("--group-threshold", type=float, default=8.579924)
+    parser.add_argument("--family-threshold", type=float, default=6.929765)
+    parser.add_argument("--subfamily-threshold", type=float, default=4.729553)
     parser.add_argument("--hierarchical-only", action="store_true")
     args = parser.parse_args()
 
@@ -511,19 +691,22 @@ def main() -> None:
         )
         print(f"Saved hierarchical switch counts: {args.hierarchical_switch_output}")
 
-        generate_tree_switch_plots(
-            rooted_tree_path=Path(args.rooted_tree),
+        generate_dendrogram_switch_plots(
+            tree_path=Path(args.rooted_tree),
             assignments_path=Path(args.assignments),
-            output_groups_svg=Path(args.tree_switch_groups_output),
-            output_families_svg=Path(args.tree_switch_families_output),
-            output_subfamilies_svg=Path(args.tree_switch_subfamilies_output),
             raw_pairwise_groups=Path(args.group_pairwise),
             raw_pairwise_families=Path(args.family_pairwise),
             raw_pairwise_subfamilies=Path(args.subfamily_pairwise),
+            output_groups_svg=Path(args.dendrogram_switch_groups_output),
+            output_families_svg=Path(args.dendrogram_switch_families_output),
+            output_subfamilies_svg=Path(args.dendrogram_switch_subfamilies_output),
+            group_threshold=float(args.group_threshold),
+            family_threshold=float(args.family_threshold),
+            subfamily_threshold=float(args.subfamily_threshold),
         )
-        print(f"Saved tree switches plot (groups): {args.tree_switch_groups_output}")
-        print(f"Saved tree switches plot (families): {args.tree_switch_families_output}")
-        print(f"Saved tree switches plot (subfamilies): {args.tree_switch_subfamilies_output}")
+        print(f"Saved dendrogram switches plot (groups): {args.dendrogram_switch_groups_output}")
+        print(f"Saved dendrogram switches plot (families): {args.dendrogram_switch_families_output}")
+        print(f"Saved dendrogram switches plot (subfamilies): {args.dendrogram_switch_subfamilies_output}")
 
 
 if __name__ == "__main__":

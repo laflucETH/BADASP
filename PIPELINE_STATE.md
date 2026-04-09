@@ -159,10 +159,10 @@
   - `results/badasp_scoring/badasp_score_distribution_groups.svg`
   - `results/badasp_scoring/badasp_score_distribution_families.svg`
   - `results/badasp_scoring/badasp_score_distribution_subfamilies.svg`
-- Tree switch-event visualizations (Supplementary S2-style):
-  - `results/badasp_scoring/tree_switches_groups.svg`
-  - `results/badasp_scoring/tree_switches_families.svg`
-  - `results/badasp_scoring/tree_switches_subfamilies.svg`
+- Unified dendrogram switch-event visualizations (Supplementary S2-style):
+  - `results/badasp_scoring/dendrogram_switches_groups.svg`
+  - `results/badasp_scoring/dendrogram_switches_families.svg`
+  - `results/badasp_scoring/dendrogram_switches_subfamilies.svg`
 - Distribution source for all score-density plots: raw pairwise score tables (`raw_pairwise_*.csv`), with 95th percentile lines derived from the same raw distributions
 - Test coverage: 32 tests passing in the current suite
 
@@ -194,8 +194,8 @@
   - BADASP score calculation: complete
   - Hierarchical comparative visualizations: complete
   - Standalone per-level score distribution plots: complete
-  - Node-mapped tree switch visualizations: complete
-  - All tests passing: complete (32/32)
+  - Unified dendrogram switch visualizations: complete
+  - All tests passing: complete (33/33)
 
 ## Pending (Before Phase 6)
 - User review/approval of Phase 5 BADASP outputs and SDP table

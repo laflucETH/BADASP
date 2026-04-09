@@ -243,3 +243,45 @@ def test_plot_tree_with_switches_writes_svg(tmp_path: Path) -> None:
 
     assert out_svg.exists()
     assert out_svg.stat().st_size > 0
+
+
+def test_plot_dendrogram_with_switches_writes_svg(tmp_path: Path) -> None:
+    from src.visualization import plot_dendrogram_with_switches
+
+    tree_path = tmp_path / "tree.nwk"
+    assignments_path = tmp_path / "assignments.csv"
+    raw_pairwise_path = tmp_path / "raw_pairwise_groups.csv"
+    out_svg = tmp_path / "dendrogram_switches_groups.svg"
+
+    tree_path.write_text("((A:0.1,B:0.1):0.2,(C:0.1,D:0.1):0.2);\n", encoding="utf-8")
+    pd.DataFrame(
+        {
+            "sequence_id": ["A", "B", "C", "D"],
+            "group_id": [1, 1, 2, 2],
+            "group_lca_node": ["NA", "NA", "NB", "NB"],
+            "family_id": [10, 10, 20, 20],
+            "family_lca_node": ["NA", "NA", "NB", "NB"],
+            "subfamily_id": [100, 100, 200, 200],
+            "subfamily_lca_node": ["NA", "NA", "NB", "NB"],
+        }
+    ).to_csv(assignments_path, index=False)
+    pd.DataFrame(
+        {
+            "pair": ["1-2", "1-2", "1-2", "1-2"],
+            "position": [1, 2, 3, 4],
+            "score": [0.1, 0.2, 0.3, 10.0],
+        }
+    ).to_csv(raw_pairwise_path, index=False)
+
+    plot_dendrogram_with_switches(
+        tree_path=tree_path,
+        assignments_path=assignments_path,
+        raw_pairwise_path=raw_pairwise_path,
+        level="groups",
+        output_svg=out_svg,
+        title="Groups Dendrogram with Switches",
+        threshold=0.2,
+    )
+
+    assert out_svg.exists()
+    assert out_svg.stat().st_size > 0
