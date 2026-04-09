@@ -190,7 +190,7 @@
   - IQ-TREE ASR execution: complete
   - LCA sequence extraction for valid clades: complete
   - Refresh with rooted tree: complete
-- **Phase 5 (Restricted BADASP Scoring): complete, awaiting user review**
+- Phase 5 (Restricted BADASP Scoring): complete, user-approved
   - TDD-first core implementation: complete
   - Multilevel hierarchy refactor (Groups/Families/Subfamilies): complete
   - Hierarchical ASR node extraction support: complete
@@ -199,8 +199,21 @@
   - Hierarchical comparative visualizations: complete
   - Standalone per-level score distribution plots: complete
   - Unified dendrogram switch visualizations: complete
+  - Min_clade_size filter audit logging: complete
+  - Visual gray-out of ignored clades: complete
   - All tests passing: complete (33/33)
+- **Phase 6 (Structural Mapping): in progress**
+  - TDD scaffold setup: pending
+  - PDB downloader function: pending
+  - Sequence-to-structure alignment: pending
+  - PyMOL script generator: pending
+  - Structural annotation module implementation: pending
+- **Phase 7 (Evolutionary & Physicochemical Analysis): pending**
+  - Evolutionary timeline (Age of Switches): pending
+  - Structural clustering analysis: pending
+  - Co-evolution network analysis: pending
+  - Physicochemical trajectory analysis: pending
 
-## Pending (Before Phase 6)
-- User review/approval of Phase 5 BADASP outputs and SDP table
-- Decision on Phase 6: Structural & Statistical Mapping of SDPs to PDB structures
+## Pending (Before Phase 7)
+- Phase 6 implementation and structural mapping completion
+- User review/approval of Phase 6 outputs
