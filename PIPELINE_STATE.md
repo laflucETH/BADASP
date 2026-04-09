@@ -94,6 +94,10 @@
 ## Phase 3 Metrics (Topological Subfamily Clustering)
 - Input tree path: `data/interim/IPR019888.tree`
 - Midpoint-rooted tree artifact: `results/topological_clustering/midpoint_rooted.tree`
+- Per-level rooted tree artifacts:
+  - `results/topological_clustering/midpoint_rooted_groups.tree`
+  - `results/topological_clustering/midpoint_rooted_families.tree`
+  - `results/topological_clustering/midpoint_rooted_subfamilies.tree`
 - Topological clades generated (after min-size filter >=5): 34
 - Minimum clade size retained: 5
 - Tree rooting mode for clustering: midpoint-rooted
@@ -101,7 +105,19 @@
 - Distance threshold used in latest rerun: 6.929765
 - Clade summary output: `results/topological_clustering/tree_clusters.csv`
 - Clade assignment output: `results/topological_clustering/tree_cluster_assignments.csv`
+- Per-level clade summary outputs:
+  - `results/topological_clustering/tree_clusters_groups.csv`
+  - `results/topological_clustering/tree_clusters_families.csv`
+  - `results/topological_clustering/tree_clusters_subfamilies.csv`
+- Per-level assignment outputs:
+  - `results/topological_clustering/tree_cluster_assignments_groups.csv`
+  - `results/topological_clustering/tree_cluster_assignments_families.csv`
+  - `results/topological_clustering/tree_cluster_assignments_subfamilies.csv`
 - Dendrogram output: `results/topological_clustering/tree_dendrogram.svg`
+- Per-level dendrograms:
+  - `results/topological_clustering/tree_dendrogram_groups.svg`
+  - `results/topological_clustering/tree_dendrogram_families.svg`
+  - `results/topological_clustering/tree_dendrogram_subfamilies.svg`
 
 ## Phase 4 Metrics (Ancestral Sequence Reconstruction)
 - ASR engine: IQ-TREE2 (`-asr`)
@@ -136,7 +152,11 @@
 - Hierarchical comparative visualizations:
   - Score distributions: `results/badasp_scoring/hierarchical_distributions.svg`
   - Switch counts across the alignment: `results/badasp_scoring/hierarchical_switch_counts.svg`
-- Test coverage: 27 tests passing in the current suite
+- Individual hierarchical score distributions:
+  - `results/badasp_scoring/badasp_score_distribution_groups.svg`
+  - `results/badasp_scoring/badasp_score_distribution_families.svg`
+  - `results/badasp_scoring/badasp_score_distribution_subfamilies.svg`
+- Test coverage: 29 tests passing in the current suite
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -165,7 +185,8 @@
   - Sister-clade switch-count aggregation: complete
   - BADASP score calculation: complete
   - Hierarchical comparative visualizations: complete
-  - All tests passing: complete (27/27)
+  - Standalone per-level score distribution plots: complete
+  - All tests passing: complete (29/29)
 
 ## Pending (Before Phase 6)
 - User review/approval of Phase 5 BADASP outputs and SDP table

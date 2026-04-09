@@ -1,0 +1,7 @@
+level,cluster_id,member_count,lca_node
+group,1,1636,InternalNode_6
+group,4,624,InternalNode_1644
+group,5,301,InternalNode_2267
+group,7,3105,InternalNode_2573
+group,8,26,InternalNode_5677
+group,9,224,InternalNode_5702

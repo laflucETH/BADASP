@@ -1,11 +1,13 @@
 import argparse
 import csv
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from Bio import Phylo
 from Bio.Phylo.BaseTree import Clade, Tree
 import numpy as np
+import pandas as pd
 from scipy.cluster.hierarchy import fcluster
 
 try:
@@ -306,6 +308,53 @@ def cluster_tree_topologically(
     return level_counts, level_thresholds
 
 
+def write_hierarchical_tree_artifacts(
+    clusters_csv: Path,
+    assignments_csv: Path,
+    rooted_tree_output: Path,
+    output_dir: Path,
+) -> None:
+    clusters_df = pd.read_csv(clusters_csv)
+    assignments_df = pd.read_csv(assignments_csv)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    level_specs = {
+        "groups": "group",
+        "families": "family",
+        "subfamilies": "subfamily",
+    }
+
+    for plural_level, singular_level in level_specs.items():
+        level_clusters = clusters_df[clusters_df["level"] == singular_level].copy()
+        level_clusters.to_csv(output_dir / f"tree_clusters_{plural_level}.csv", index=False)
+
+        level_assignments = assignments_df[
+            ["sequence_id", f"{singular_level}_id", f"{singular_level}_lca_node"]
+        ].copy()
+        level_assignments.columns = ["sequence_id", "cluster_id", "lca_node"]
+        level_assignments.to_csv(output_dir / f"tree_cluster_assignments_{plural_level}.csv", index=False)
+
+        shutil.copyfile(rooted_tree_output, output_dir / f"midpoint_rooted_{plural_level}.tree")
+
+
+def write_hierarchical_dendrograms(
+    tree_path: Path,
+    thresholds: Dict[str, float],
+    output_dir: Path,
+) -> None:
+    tree = Phylo.read(str(tree_path), "newick")
+    tree.root_at_midpoint()
+    _, linkage_rows = tree_to_linkage(tree)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for plural_level, singular_level in (("groups", "group"), ("families", "family"), ("subfamilies", "subfamily")):
+        plot_topological_dendrogram(
+            linkage_rows,
+            output_dir / f"tree_dendrogram_{plural_level}.svg",
+            color_threshold=thresholds[singular_level],
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Topological clustering of a phylogenetic tree.")
     parser.add_argument("--tree", default="data/interim/IPR019888.tree")
@@ -342,6 +391,18 @@ def main() -> None:
         min_clade_size=args.min_clade_size,
         dendrogram_output=Path(args.dendrogram_output),
     )
+
+    write_hierarchical_dendrograms(
+        tree_path=Path(args.tree),
+        thresholds=level_thresholds,
+        output_dir=Path(args.assignments_output).parent,
+    )
+    write_hierarchical_tree_artifacts(
+        clusters_csv=Path(args.clusters_output),
+        assignments_csv=Path(args.assignments_output),
+        rooted_tree_output=Path(args.rooted_tree_output),
+        output_dir=Path(args.assignments_output).parent,
+    )
     print(f"Groups generated: {level_counts['group']}")
     print(f"Families generated: {level_counts['family']}")
     print(f"Subfamilies generated: {level_counts['subfamily']}")
@@ -351,6 +412,8 @@ def main() -> None:
         f"family={level_thresholds['family']:.6f}, "
         f"subfamily={level_thresholds['subfamily']:.6f}"
     )
+    print("Saved tree artifacts: tree_dendrogram_groups.svg, tree_dendrogram_families.svg, tree_dendrogram_subfamilies.svg")
+    print("Saved tree CSV/tree artifacts for groups, families, and subfamilies")
 
 
 if __name__ == "__main__":

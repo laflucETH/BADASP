@@ -27,6 +27,14 @@ def default_hierarchical_badasp_plot_paths() -> Tuple[Path, Path]:
     )
 
 
+def default_individual_badasp_plot_paths() -> Tuple[Path, Path, Path]:
+    return (
+        Path("results/badasp_scoring/badasp_score_distribution_groups.svg"),
+        Path("results/badasp_scoring/badasp_score_distribution_families.svg"),
+        Path("results/badasp_scoring/badasp_score_distribution_subfamilies.svg"),
+    )
+
+
 def _read_fasta_lengths(fasta_path: Path) -> List[int]:
     return [len(record.seq) for record in SeqIO.parse(str(fasta_path), "fasta")]
 
@@ -112,6 +120,29 @@ def _load_score_table(score_path: Path) -> pd.DataFrame:
     return df
 
 
+def plot_badasp_score_distribution(
+    score_path: Path,
+    output_svg: Path,
+    title: str,
+    color: str,
+) -> None:
+    df = _load_score_table(score_path)
+    scores = df["badasp_score"].astype(float).to_numpy()
+    threshold = float(df["global_threshold"].iloc[0])
+
+    output_svg.parent.mkdir(parents=True, exist_ok=True)
+    plt.figure(figsize=(10, 6))
+    sns.histplot(scores, bins=40, kde=True, stat="density", color=color, alpha=0.35)
+    plt.axvline(threshold, color=color, linestyle="--", linewidth=2.0, label=f"95th percentile = {threshold:.3f}")
+    plt.title(title)
+    plt.xlabel("Raw BADASP Score")
+    plt.ylabel("Density")
+    plt.legend(frameon=False)
+    plt.tight_layout()
+    plt.savefig(output_svg, format="svg")
+    plt.close()
+
+
 def plot_hierarchical_badasp_distributions(
     group_scores: Path,
     family_scores: Path,
@@ -186,10 +217,39 @@ def plot_hierarchical_switch_counts(
     plt.close(fig)
 
 
+def plot_individual_hierarchical_badasp_distributions(
+    group_scores: Path,
+    family_scores: Path,
+    subfamily_scores: Path,
+    output_group_svg: Path,
+    output_family_svg: Path,
+    output_subfamily_svg: Path,
+) -> None:
+    plot_badasp_score_distribution(
+        score_path=group_scores,
+        output_svg=output_group_svg,
+        title="Groups BADASP Score Distribution",
+        color="#1F77B4",
+    )
+    plot_badasp_score_distribution(
+        score_path=family_scores,
+        output_svg=output_family_svg,
+        title="Families BADASP Score Distribution",
+        color="#D95F02",
+    )
+    plot_badasp_score_distribution(
+        score_path=subfamily_scores,
+        output_svg=output_subfamily_svg,
+        title="Subfamilies BADASP Score Distribution",
+        color="#2CA02C",
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="QC and hierarchical BADASP visualizations.")
     default_length_out, default_gap_out, _ = default_plot_paths()
     default_hier_dist_out, default_hier_switch_out = default_hierarchical_badasp_plot_paths()
+    default_group_dist_out, default_family_dist_out, default_subfamily_dist_out = default_individual_badasp_plot_paths()
     parser.add_argument("--fasta", default=None, help="Input FASTA for length distribution plot.")
     parser.add_argument("--length-output", default=str(default_length_out))
     parser.add_argument("--msa", default=None, help="Input MSA FASTA for gap-per-column plot.")
@@ -199,6 +259,9 @@ def main() -> None:
     parser.add_argument("--subfamily-scores", default="results/badasp_scoring/badasp_scores_subfamilies.csv")
     parser.add_argument("--hierarchical-distribution-output", default=str(default_hier_dist_out))
     parser.add_argument("--hierarchical-switch-output", default=str(default_hier_switch_out))
+    parser.add_argument("--group-distribution-output", default=str(default_group_dist_out))
+    parser.add_argument("--family-distribution-output", default=str(default_family_dist_out))
+    parser.add_argument("--subfamily-distribution-output", default=str(default_subfamily_dist_out))
     parser.add_argument("--hierarchical-only", action="store_true")
     args = parser.parse_args()
 
@@ -211,6 +274,18 @@ def main() -> None:
         print(f"Saved gap profile: {args.gap_output}")
 
     if Path(args.group_scores).exists() and Path(args.family_scores).exists() and Path(args.subfamily_scores).exists():
+        plot_individual_hierarchical_badasp_distributions(
+            group_scores=Path(args.group_scores),
+            family_scores=Path(args.family_scores),
+            subfamily_scores=Path(args.subfamily_scores),
+            output_group_svg=Path(args.group_distribution_output),
+            output_family_svg=Path(args.family_distribution_output),
+            output_subfamily_svg=Path(args.subfamily_distribution_output),
+        )
+        print(f"Saved group score distribution: {args.group_distribution_output}")
+        print(f"Saved family score distribution: {args.family_distribution_output}")
+        print(f"Saved subfamily score distribution: {args.subfamily_distribution_output}")
+
         plot_hierarchical_badasp_distributions(
             group_scores=Path(args.group_scores),
             family_scores=Path(args.family_scores),

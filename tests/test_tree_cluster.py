@@ -1,4 +1,6 @@
 from pathlib import Path
+import csv
+import shutil
 
 import pandas as pd
 from Bio import Phylo
@@ -107,3 +109,51 @@ def test_cluster_tree_topologically_filters_small_clades(tmp_path: Path) -> None
             subfamily_target_min_clades=4,
             subfamily_target_max_clades=4,
         )
+
+
+def test_write_hierarchical_tree_artifacts_writes_level_specific_csv_and_tree_files(tmp_path: Path) -> None:
+    from src.tree_cluster import write_hierarchical_tree_artifacts
+
+    clusters_csv = tmp_path / "tree_clusters.csv"
+    assignments_csv = tmp_path / "tree_cluster_assignments.csv"
+    rooted_tree = tmp_path / "midpoint_rooted.tree"
+    output_dir = tmp_path / "level_artifacts"
+
+    clusters_csv.write_text(
+        "level,cluster_id,member_count,lca_node\n"
+        "group,1,4,G1\n"
+        "family,10,2,F10\n"
+        "subfamily,100,1,S100\n",
+        encoding="utf-8",
+    )
+    assignments_csv.write_text(
+        "sequence_id,group_id,group_lca_node,family_id,family_lca_node,subfamily_id,subfamily_lca_node\n"
+        "A,1,G1,10,F10,100,S100\n",
+        encoding="utf-8",
+    )
+    rooted_tree.write_text("(A:0.1,B:0.1)Root;\n", encoding="utf-8")
+
+    write_hierarchical_tree_artifacts(
+        clusters_csv=clusters_csv,
+        assignments_csv=assignments_csv,
+        rooted_tree_output=rooted_tree,
+        output_dir=output_dir,
+    )
+
+    expected_files = [
+        output_dir / "tree_clusters_groups.csv",
+        output_dir / "tree_clusters_families.csv",
+        output_dir / "tree_clusters_subfamilies.csv",
+        output_dir / "tree_cluster_assignments_groups.csv",
+        output_dir / "tree_cluster_assignments_families.csv",
+        output_dir / "tree_cluster_assignments_subfamilies.csv",
+        output_dir / "midpoint_rooted_groups.tree",
+        output_dir / "midpoint_rooted_families.tree",
+        output_dir / "midpoint_rooted_subfamilies.tree",
+    ]
+    for path in expected_files:
+        assert path.exists()
+        assert path.stat().st_size > 0
+
+    groups_csv = pd.read_csv(output_dir / "tree_clusters_groups.csv")
+    assert list(groups_csv["level"]) == ["group"]

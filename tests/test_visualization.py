@@ -167,3 +167,30 @@ def test_plot_hierarchical_switch_counts_writes_svg(tmp_path: Path) -> None:
 
     assert output_svg.exists()
     assert output_svg.stat().st_size > 0
+
+
+def test_plot_badasp_score_distribution_writes_svg(tmp_path: Path) -> None:
+    from src.visualization import plot_badasp_score_distribution
+
+    scores_csv = tmp_path / "badasp_scores_groups.csv"
+    output_svg = tmp_path / "badasp_score_distribution_groups.svg"
+
+    pd.DataFrame(
+        {
+            "position": [1, 2, 3, 4],
+            "max_score": [0.5, 1.0, 1.5, 2.0],
+            "switch_count": [0, 1, 2, 3],
+            "global_threshold": [1.25, 1.25, 1.25, 1.25],
+            "badasp_score": [0.5, 1.0, 1.5, 2.0],
+        }
+    ).to_csv(scores_csv, index=False)
+
+    plot_badasp_score_distribution(
+        score_path=scores_csv,
+        output_svg=output_svg,
+        title="Groups BADASP Score Distribution",
+        color="#1F77B4",
+    )
+
+    assert output_svg.exists()
+    assert output_svg.stat().st_size > 0
