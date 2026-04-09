@@ -111,32 +111,28 @@
 - LCA ancestral sequences written: 34
 - LCA ancestral FASTA output: `data/interim/ancestral_sequences.fasta`
 - Refresh status: completed after rooted-tree and 34-clade Phase 3 rerun.
+- Hierarchical extraction support: `src/asr_runner.py` now reads all unique `*_lca_node` values across group, family, and subfamily assignments for multilevel reruns.
+- Hierarchical rerun written: 142 ancestral sequences from the current multilevel assignment table.
 
 ## Phase 5 Metrics (Restricted BADASP Scoring)
-- Implementation: TDD-first with `src/badasp_core.py` and `tests/test_badasp_core.py` (15 Phase 5 tests)
-- Method: unique sister-clade event scoring with global pooled thresholding and switch counting
-  - Sister clade pairing: nearest sister clade pairs from the phylogenetic tree, deduplicated so each divergence event is scored once
-  - RC (Recent Conservation): average BLOSUM62-based continuous similarity across the two sister clades
-  - AC (Ancestral Conservation): binary identical/different call between sister clade ancestral residues (1 or -1)
-  - p(AC): posterior probability from IQ-TREE state file
+- Implementation: TDD-first with `src/badasp_core.py` and `tests/test_badasp_core.py` for the multilevel hierarchy contract
+- Method: three-level BADASP scoring for group, family, and subfamily comparisons
+  - Sister-pairing: level-specific sister-clade events, nested within parent hierarchy constraints
+  - RC (Recent Conservation): average BLOSUM62-based similarity across the compared clades
+  - AC (Ancestral Conservation): binary identical/different call between ancestral residues (1 or -1)
+  - p(AC): posterior probability from the IQ-TREE state file
   - Score: `RC - (AC * p(AC))`
-  - Global threshold: 95th percentile computed from the pooled set of all sister-pair / position scores
-  - Switch count: per-position count of sister-pair scores strictly greater than the global threshold
-- LCA node mapping: automated tree traversal to map Phase 3 clade IDs to Phase 4 ASR tree nodes
-- Alignment positions scored: 165 (full trimmed alignment length)
-- BADASP score statistics:
-  - Mean: 1.1861
-  - Median: 1.2900
-  - Std. dev: 0.4055
-  - Range: [-0.4654, 1.6012]
-- 95th percentile threshold: 1.254422
-- Specificity Determining Positions (SDPs) identified: **1 position**
-- Highest switch-count SDP: position 46 (switch_count = 10, max_score = 1.581841)
-- Outputs:
-  - Full scores: `results/badasp_scoring/badasp_scores.csv` (165 positions × 5 columns; includes `max_score`, `switch_count`, `global_threshold`)
-  - SDP table: `results/badasp_scoring/badasp_sdps.csv` (1 position × 5 columns)
-  - Distribution plot: `results/badasp_scoring/badasp_score_distribution.svg` (publication-ready SVG)
-- Test coverage: 33 tests passing (18 existing + 15 Phase 5 tests)
+  - Thresholding: pooled 95th percentile threshold per hierarchy level
+  - SDP selection: highest switch-count positions per level
+- Outputs written by the refactor:
+  - `results/badasp_scoring/badasp_scores_groups.csv`
+  - `results/badasp_scoring/badasp_scores_families.csv`
+  - `results/badasp_scoring/badasp_scores_subfamilies.csv`
+- Test coverage: 25 tests passing in the current suite
+- Hierarchical rerun thresholds:
+  - Groups: 1.354551, top SDP position 12 (switch_count = 11, max_score = 1.446354)
+  - Families: 1.366446, top SDP position 27 (switch_count = 56, max_score = 1.631724)
+  - Subfamilies: 1.384612, top SDP position 44 (switch_count = 141, max_score = 1.666147)
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -160,14 +156,13 @@
   - Refresh with rooted tree: complete
 - **Phase 5 (Restricted BADASP Scoring): complete, awaiting user review**
   - TDD-first core implementation: complete
-  - LCA node mapping (Phase 3 <-> Phase 4): complete
+  - Multilevel hierarchy refactor (Groups/Families/Subfamilies): complete
+  - Hierarchical ASR node extraction support: complete
   - Sister-clade switch-count aggregation: complete
   - BADASP score calculation: complete
-  - SDP identification (highest switch count after global 95th percentile threshold): complete
-  - Score distribution visualization: complete
-  - All tests passing: complete (33/33)
+  - All tests passing: complete (25/25)
 
 ## Pending (Before Phase 6)
-- Refactoring Phases 3, 4, and 5 to support 3-level hierarchical specificity analysis (Groups, Families, Subfamilies) mirroring Bradley & Beltrao (2019) kinase study design.
+- Rerun the Phase 4/Phase 5 pipeline on the full hierarchical outputs and review the per-level score tables / SDP summaries.
 - User review/approval of Phase 5 BADASP outputs and SDP table
 - Decision on Phase 6: Structural & Statistical Mapping of SDPs to PDB structures

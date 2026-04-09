@@ -1,114 +1,24 @@
-"""
-Phase 5: Restricted BADASP Scoring for Specificity Determining Position (SDP) Identification.
+"""Phase 5 multi-level BADASP scoring for Groups, Families, and Subfamilies."""
 
-Implementation of the adapted BADASP algorithm:
-  Score = RC * AC * p(AC)
-  
-Where:
-  - RC: Recent conservation within clade modern sequences
-  - AC: Ancestral conservation (BLOSUM62 substitution score between LCA pairs)
-  - p(AC): Posterior probability of ancestral assignment from IQ-TREE
+from __future__ import annotations
 
-This implementation restricts scoring to deep ancestral divergence events between
-the 34 defined topological clades, filtering out shallow intra-clade drift.
-
-95th percentile threshold isolates true "bursts" of functional divergence.
-"""
-
-import pandas as pd
-import numpy as np
-from pathlib import Path
-from functools import lru_cache
-from typing import Dict, Tuple, List, Optional
-from Bio import SeqIO, AlignIO
+import csv
 import logging
+from collections import defaultdict
+from functools import lru_cache
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple
+
+import numpy as np
+import pandas as pd
+from Bio import AlignIO, Phylo, SeqIO
+from Bio.Phylo.BaseTree import Clade, Tree
 
 logger = logging.getLogger(__name__)
 
 
-def load_state_file(state_path: Path) -> Dict[str, pd.DataFrame]:
-    """
-    Load IQ-TREE .state file and organize by node into a dictionary of DataFrames.
-    
-    Args:
-        state_path: Path to IQ-TREE .state file
-        
-    Returns:
-        Dictionary mapping node names (e.g., "Node10") to DataFrames with posterior probabilities
-    """
-    state_path = Path(state_path)
-    state_data = {}
-    
-    with open(state_path, "r") as f:
-        lines = f.readlines()
-    
-    # Skip header lines (lines starting with # and the header "Node Site State p_A...")
-    data_lines = []
-    for l in lines:
-        if l.strip().startswith("#"):
-            continue
-        if l.strip().startswith("Node") and "Site" in l and "State" in l:
-            # This is the column header row, skip it
-            continue
-        data_lines.append(l)
-    
-    if not data_lines:
-        raise ValueError(f"No data lines found in state file {state_path}")
-    
-    # Parse tab-separated data
-    for line in data_lines:
-        if not line.strip():
-            continue
-        
-        parts = line.strip().split("\t")
-        if len(parts) < 4:
-            continue
-        
-        try:
-            node = parts[0]
-            site = int(parts[1])
-            state = parts[2]
-            # Posterior probabilities: columns 3+ are p_A, p_R, ..., p_V
-            probs = [float(p) for p in parts[3:]]
-        except (ValueError, IndexError):
-            continue
-        
-        if node not in state_data:
-            state_data[node] = []
-        
-        state_data[node].append({
-            "Site": site,
-            "State": state,
-            "probs": probs,
-            "raw": parts[3:]
-        })
-    
-    # Convert lists to DataFrames for each node
-    result = {}
-    for node, rows in state_data.items():
-        df = pd.DataFrame(rows)
-        result[node] = df
-    
-    return result
-
-
-def parse_clade_assignments(assignments_path: Path) -> pd.DataFrame:
-    """
-    Parse clade assignment CSV file (output from Phase 3 clustering).
-    
-    Args:
-        assignments_path: Path to tree_cluster_assignments.csv
-        
-    Returns:
-        DataFrame with columns: sequence_id, clade_id, lca_node
-    """
-    assignments = pd.read_csv(assignments_path)
-    return assignments
-
-
 @lru_cache(maxsize=1)
 def _get_blosum62_matrix() -> Dict[Tuple[str, str], int]:
-    """Return the BLOSUM62 substitution matrix."""
     return {
         ('A', 'A'): 4,   ('A', 'R'): -1,  ('A', 'N'): -2,  ('A', 'D'): -2,  ('A', 'C'): 0,
         ('A', 'Q'): -1,  ('A', 'E'): -1,  ('A', 'G'): 0,   ('A', 'H'): -2,  ('A', 'I'): -1,
@@ -194,7 +104,6 @@ def _get_blosum62_matrix() -> Dict[Tuple[str, str], int]:
 
 
 def _blosum62_pair_score(aa1: str, aa2: str) -> float:
-    """Return the BLOSUM62 score for a residue pair, or 0 for unsupported pairs."""
     matrix = _get_blosum62_matrix()
     aa1 = aa1.upper()
     aa2 = aa2.upper()
@@ -205,335 +114,349 @@ def _blosum62_pair_score(aa1: str, aa2: str) -> float:
     return 0.0
 
 
-def calculate_recent_conservation(
-    sequences: List[str], 
-    position: int
-) -> float:
-    """
-    Calculate recent conservation (RC) for a position within a clade's modern sequences.
+def load_state_file(state_path: Path) -> Dict[str, pd.DataFrame]:
+    state_path = Path(state_path)
+    state_data: Dict[str, List[Dict[str, object]]] = {}
 
-    RC is a continuous substitution-similarity measure derived from BLOSUM62 and
-    normalized to the 0-1 interval.
-    
-    Args:
-        sequences: List of aligned sequences (all same length)
-        position: 0-indexed position in alignment
-        
-    Returns:
-        Float between 0 and 1 representing conservation similarity
-    """
+    with state_path.open("r", encoding="utf-8") as handle:
+        lines = handle.readlines()
+
+    data_lines = []
+    for line in lines:
+        if line.strip().startswith("#"):
+            continue
+        if line.strip().startswith("Node") and "Site" in line and "State" in line:
+            continue
+        data_lines.append(line)
+
+    if not data_lines:
+        raise ValueError(f"No data lines found in state file {state_path}")
+
+    for line in data_lines:
+        if not line.strip():
+            continue
+        parts = line.strip().split("\t")
+        if len(parts) < 4:
+            continue
+        try:
+            node = parts[0]
+            site = int(parts[1])
+            state = parts[2]
+            probs = [float(p) for p in parts[3:]]
+        except (ValueError, IndexError):
+            continue
+        state_data.setdefault(node, []).append({"Site": site, "State": state, "probs": probs, "raw": parts[3:]})
+
+    return {node: pd.DataFrame(rows) for node, rows in state_data.items()}
+
+
+def parse_clade_assignments(assignments_path: Path) -> pd.DataFrame:
+    return pd.read_csv(assignments_path)
+
+
+def calculate_recent_conservation(sequences: List[str], position: int) -> float:
     if not sequences:
         return 0.0
-
-    if position < 0 or position >= len(sequences[0]):
-        return 0.0
-
-    # Extract position from all sequences, excluding gaps and unsupported symbols.
-    residues = [seq[position] for seq in sequences if len(seq) > position and seq[position] not in "-."]
-    
+    residues = [seq[position] for seq in sequences if len(seq) > position and seq[position] not in {"-", "."}]
     if not residues:
         return 0.0
-
     if len(residues) == 1:
         return 1.0
-
     pair_scores = []
     for i in range(len(residues)):
         for j in range(i + 1, len(residues)):
             pair_scores.append(_blosum62_pair_score(residues[i], residues[j]))
-
     if not pair_scores:
         return 0.0
-
     mean_score = float(np.mean(pair_scores))
     normalized_score = (mean_score + 4.0) / 15.0
     return float(np.clip(normalized_score, 0.0, 1.0))
 
 
 def calculate_ancestral_conservation(aa1: str, aa2: str) -> float:
-    """
-    Calculate ancestral conservation (AC) as a binary identical/different call.
-
-    AC = 1 if the predicted ancestral residues are identical, otherwise -1.
-    
-    Args:
-        aa1: First amino acid
-        aa2: Second amino acid
-        
-    Returns:
-        Binary score: 1 for identical residues, -1 for differences
-    """
-    aa1_up = aa1.upper()
-    aa2_up = aa2.upper()
-    if aa1_up == aa2_up and aa1_up not in {"-", "."}:
-        return 1.0
-    return -1.0
+    return 1.0 if aa1.upper() == aa2.upper() and aa1.upper() not in {"-", "."} else -1.0
 
 
-def extract_posterior_probability(
-    state_data: Dict[str, pd.DataFrame],
-    node: str,
-    site: int,
-    aa: str
-) -> float:
-    """
-    Extract posterior probability for a specific node, site, and amino acid from state data.
-    
-    Args:
-        state_data: Dictionary from load_state_file
-        node: Node name (e.g., "Node10")
-        site: 1-indexed alignment site
-        aa: Amino acid single letter code
-        
-    Returns:
-        Posterior probability (0.0-1.0) or 0.0 if not found
-    """
+def extract_posterior_probability(state_data: Dict[str, pd.DataFrame], node: str, site: int, aa: str) -> float:
     if node not in state_data:
         return 0.0
-    
     node_df = state_data[node]
-    
-    # Find row with matching site
     site_rows = node_df[node_df["Site"] == site]
     if site_rows.empty:
         return 0.0
-    
     row = site_rows.iloc[0]
-    
-    # Map amino acid to index in probability array
-    # Order from IQ-TREE state file: A R N D C Q E G H I L K M F P S T W Y V
     aa_order = "ARNDCQEGHILKMFPSTWYV"
-    if aa.upper() not in aa_order:
+    aa_upper = aa.upper()
+    if aa_upper not in aa_order:
         return 0.0
-    
-    aa_idx = aa_order.index(aa.upper())
-    
-    # Extract probability from probs array
+    aa_idx = aa_order.index(aa_upper)
     if "probs" in row and aa_idx < len(row["probs"]):
         return float(row["probs"][aa_idx])
-    
     return 0.0
 
 
-def compute_badasp_scores(
+def _level_columns(assignments: pd.DataFrame, level: str) -> Tuple[str, str]:
+    id_col = f"{level}_id"
+    lca_col = f"{level}_lca_node"
+    if id_col not in assignments.columns or lca_col not in assignments.columns:
+        raise KeyError(f"Missing {id_col} or {lca_col} in assignments")
+    return id_col, lca_col
+
+
+def _resolve_hierarchical_lca_nodes(assignments: pd.DataFrame, tree: Tree) -> Dict[str, str]:
+    lca_columns = [col for col in assignments.columns if col.endswith("_lca_node")]
+    if not lca_columns:
+        return {}
+
+    node_members: Dict[str, List[str]] = defaultdict(list)
+    for _, row in assignments.iterrows():
+        sequence_id = str(row["sequence_id"])
+        for col in lca_columns:
+            label = str(row[col]).strip()
+            if label and sequence_id not in node_members[label]:
+                node_members[label].append(sequence_id)
+
+    resolved: Dict[str, str] = {}
+    for label, members in node_members.items():
+        lca_node = tree.common_ancestor(members)
+        if not lca_node.name:
+            raise ValueError(f"LCA node for {label} has no node name in ASR tree.")
+        resolved[label] = lca_node.name
+    return resolved
+
+
+def _pairs_within_parent(assignments: pd.DataFrame, level: str, parent_col: Optional[str] = None) -> List[Tuple[int, int]]:
+    id_col, _ = _level_columns(assignments, level)
+    if parent_col is None:
+        ids = sorted(assignments[id_col].dropna().unique().tolist())
+        pairs = []
+        for i in range(len(ids)):
+            for j in range(i + 1, len(ids)):
+                pairs.append((int(ids[i]), int(ids[j])))
+        return pairs
+
+    pairs: List[Tuple[int, int]] = []
+    for parent_value, group in assignments[[id_col, parent_col]].drop_duplicates().groupby(parent_col):
+        ids = sorted(group[id_col].dropna().unique().tolist())
+        for i in range(len(ids)):
+            for j in range(i + 1, len(ids)):
+                pairs.append((int(ids[i]), int(ids[j])))
+    return sorted(set(tuple(sorted(pair)) for pair in pairs))
+
+
+def build_hierarchical_sister_pairs(assignments: pd.DataFrame, tree_path: Path) -> Dict[str, List[Tuple[int, int]]]:
+    # The current hierarchy already encodes parent/child nesting, so sister-pairing is performed within each level.
+    _ = tree_path  # retained for API parity and future tree-aware refinement.
+    return {
+        "groups": _pairs_within_parent(assignments, "group"),
+        "families": _pairs_within_parent(assignments, "family", parent_col="group_id"),
+        "subfamilies": _pairs_within_parent(assignments, "subfamily", parent_col="family_id"),
+    }
+
+
+def _compute_level_scores(
+    level: str,
+    alignment,
+    assignments: pd.DataFrame,
+    ancestral_seqs: Dict[str, str],
+    state_data: Dict[str, pd.DataFrame],
+    pairs: List[Tuple[int, int]],
+    resolved_lca_nodes: Dict[str, str],
+) -> Dict[str, pd.DataFrame]:
+    id_col, lca_col = _level_columns(assignments, level)
+    seq_dict = {record.id: str(record.seq) for record in alignment}
+    aln_length = alignment.get_alignment_length()
+
+    level_grouped = assignments.groupby(id_col)
+    level_sequences: Dict[int, List[str]] = {}
+    level_lcas: Dict[int, str] = {}
+    for cluster_id, frame in level_grouped:
+        seq_ids = frame["sequence_id"].tolist()
+        level_sequences[int(cluster_id)] = [seq_dict[sid] for sid in seq_ids if sid in seq_dict]
+        raw_lca = str(frame.iloc[0][lca_col]).strip()
+        if raw_lca not in resolved_lca_nodes:
+            raise KeyError(f"No resolved ASR node found for {raw_lca}.")
+        level_lcas[int(cluster_id)] = resolved_lca_nodes[raw_lca]
+
+    pairwise_scores: List[Dict[str, object]] = []
+    for cluster_a, cluster_b in pairs:
+        if cluster_a not in level_sequences or cluster_b not in level_sequences:
+            continue
+        lca_a = level_lcas[cluster_a]
+        lca_b = level_lcas[cluster_b]
+        if lca_a not in ancestral_seqs or lca_b not in ancestral_seqs:
+            continue
+        for pos in range(aln_length):
+            if pos >= len(ancestral_seqs[lca_a]) or pos >= len(ancestral_seqs[lca_b]):
+                continue
+            aa_a = ancestral_seqs[lca_a][pos]
+            aa_b = ancestral_seqs[lca_b][pos]
+            if aa_a in {"-", "."} or aa_b in {"-", "."}:
+                continue
+            rc_a = calculate_recent_conservation(level_sequences[cluster_a], pos)
+            rc_b = calculate_recent_conservation(level_sequences[cluster_b], pos)
+            rc = (rc_a + rc_b) / 2.0
+            ac = calculate_ancestral_conservation(aa_a, aa_b)
+            p_a = extract_posterior_probability(state_data, lca_a, pos + 1, aa_a)
+            p_b = extract_posterior_probability(state_data, lca_b, pos + 1, aa_b)
+            p_ac = (p_a + p_b) / 2.0
+            score = rc - (ac * p_ac)
+            pairwise_scores.append(
+                {
+                    "level": level,
+                    "pair": f"{cluster_a}-{cluster_b}",
+                    "position": pos + 1,
+                    "rc": rc,
+                    "ac": ac,
+                    "p_ac": p_ac,
+                    "score": score,
+                }
+            )
+
+    flat_scores = [entry["score"] for entry in pairwise_scores]
+    global_threshold = float(np.percentile(flat_scores, 95)) if flat_scores else 0.0
+
+    position_rows = []
+    for pos in range(1, aln_length + 1):
+        pos_scores = [entry["score"] for entry in pairwise_scores if entry["position"] == pos]
+        max_score = max(pos_scores) if pos_scores else 0.0
+        switch_count = int(sum(1 for score in pos_scores if score > global_threshold))
+        position_rows.append(
+            {
+                "position": pos,
+                "max_score": float(max_score),
+                "switch_count": switch_count,
+                "global_threshold": global_threshold,
+                "badasp_score": float(max_score),
+            }
+        )
+
+    score_df = pd.DataFrame(position_rows)
+    sdp_df, threshold = identify_sdps(score_df)
+
+    if pairwise_scores:
+        max_entry = max(pairwise_scores, key=lambda row: row["score"])
+        print(
+            f"[{level.upper()}] Max Pos: Pos={max_entry['position']}, RC={max_entry['rc']:.6f}, AC={max_entry['ac']:.6f}, p={max_entry['p_ac']:.6f}, Score={max_entry['score']:.6f}"
+        )
+        print(f"[{level.upper()}] Global pooled threshold (95th percentile): {global_threshold:.6f}")
+
+    return {
+        "pairwise": pd.DataFrame(pairwise_scores),
+        "scores": score_df,
+        "sdps": sdp_df,
+        "threshold": threshold,
+        "pairs": pairs,
+    }
+
+
+def compute_multilevel_badasp_scores(
     alignment_path: Path,
     assignments_path: Path,
     ancestral_path: Path,
     state_path: Path,
-    clusters_path: Optional[Path] = None,
+    tree_path: Path,
     min_clade_size: int = 5,
-) -> pd.DataFrame:
-    """
-    Compute restricted BADASP scores for all alignment positions.
-    
-    Restriction: Only scores divergences between top-level clade LCAs,
-    ignoring within-clade and shallow branch variations.
-    
-    Args:
-        alignment_path: Path to trimmed alignment FASTA
-        assignments_path: Path to clade assignments CSV
-        ancestral_path: Path to ancestral sequences FASTA
-        state_path: Path to IQ-TREE state file
-        clusters_path: Path to tree_clusters.csv with LCA node info
-        min_clade_size: Minimum sequences per clade to include
-        
-    Returns:
-        DataFrame with columns: position, rc, ac, p_ac, badasp_score
-    """
-    # Load data
+) -> Dict[str, Dict[str, object]]:
     alignment = AlignIO.read(alignment_path, "fasta")
-    assignments = parse_clade_assignments(assignments_path)
+    assignments = pd.read_csv(assignments_path)
     ancestral_seqs = {rec.id: str(rec.seq) for rec in SeqIO.parse(ancestral_path, "fasta")}
     state_data = load_state_file(state_path)
-    
-    # Load clusters information if provided (contains LCA node mapping)
-    if clusters_path:
-        clusters_df = pd.read_csv(clusters_path)
-        # Use lca_node_asr if available (corrected ASR node names), otherwise use lca_node
-        node_col = "lca_node_asr" if "lca_node_asr" in clusters_df.columns else "lca_node"
-        lca_mapping = dict(zip(clusters_df["clade_id"], clusters_df[node_col]))
-    else:
-        lca_mapping = {}
-    
-    # Filter clades by minimum size
-    clade_sizes = assignments.groupby("clade_id").size()
-    valid_clades = clade_sizes[clade_sizes >= min_clade_size].index.tolist()
-    assignments = assignments[assignments["clade_id"].isin(valid_clades)]
-    
-    # Get alignment length
-    aln_length = alignment.get_alignment_length()
-    
-    # Group sequences by clade
-    clade_sequences = {}
-    clade_lca_nodes = {}
-    
-    # Create mapping from terminal name to sequence
-    seq_dict = {record.id: str(record.seq) for record in alignment}
-    
-    for clade_id in valid_clades:
-        clade_seqs = assignments[assignments["clade_id"] == clade_id]
-        seq_ids = clade_seqs["terminal_name"].tolist()
-        
-        # Get sequences for this clade
-        seqs = [seq_dict[sid] for sid in seq_ids if sid in seq_dict]
-        clade_sequences[clade_id] = seqs
-        
-        # Get LCA node for this clade
-        if clade_id in lca_mapping:
-            lca_node = lca_mapping[clade_id]
-        else:
-            # Fallback: use first entry's lca_node if available, or generate node name
-            if "lca_node" in clade_seqs.columns:
-                lca_node = clade_seqs.iloc[0]["lca_node"]
-            else:
-                lca_node = f"InternalNode_{clade_id}"
-        lca_mapping[clade_id] = lca_node
-        clade_lca_nodes[clade_id] = lca_node
-    
-    # Compute scores for each position
-    scores = []
-    for pos in range(aln_length):
-        # RC: conservation within each clade
-        rc_values = []
-        for clade_id in valid_clades:
-            rc = calculate_recent_conservation(clade_sequences[clade_id], pos)
-            rc_values.append(rc)
-        
-        # Average RC across clades
-        rc_avg = np.mean(rc_values) if rc_values else 0.0
-        
-        # AC: binary agreement/disagreement between clade LCA pairs
-        ac_values = []
-        p_ac_values = []
-        
-        # Compare all pairs of clade LCAs
-        clade_list = list(valid_clades)
-        for i in range(len(clade_list)):
-            for j in range(i + 1, len(clade_list)):
-                clade_i = clade_list[i]
-                clade_j = clade_list[j]
-                
-                lca_i = clade_lca_nodes[clade_i]
-                lca_j = clade_lca_nodes[clade_j]
-                
-                # Get ancestral amino acids at this position
-                if lca_i in ancestral_seqs and lca_j in ancestral_seqs:
-                    if pos < len(ancestral_seqs[lca_i]) and pos < len(ancestral_seqs[lca_j]):
-                        aa_i = ancestral_seqs[lca_i][pos]
-                        aa_j = ancestral_seqs[lca_j][pos]
-                        
-                        # Skip gaps
-                        if aa_i != '-' and aa_j != '-':
-                            ac = calculate_ancestral_conservation(aa_i, aa_j)
-                            ac_values.append(ac)
-                            
-                            # Extract posterior probability (use aa_i's probability)
-                            p_ac = extract_posterior_probability(state_data, lca_i, pos + 1, aa_i)
-                            p_ac_values.append(p_ac)
-        
-        # Average AC and p(AC) across all clade pairs
-        ac_avg = np.mean(ac_values) if ac_values else 0.0
-        p_ac_avg = np.mean(p_ac_values) if p_ac_values else 0.0
-        
-        # Compute BADASP score using the Bradley-style subtractive adaptation
-        badasp_score = rc_avg - (ac_avg * p_ac_avg)
-        
-        scores.append({
-            "position": pos + 1,  # 1-indexed for user
-            "rc": rc_avg,
-            "ac": ac_avg,
-            "p_ac": p_ac_avg,
-            "badasp_score": badasp_score,
-        })
-    
-    return pd.DataFrame(scores)
+    tree = Phylo.read(str(tree_path), "newick")
+
+    filtered = assignments.copy()
+    for level in ("group", "family", "subfamily"):
+        id_col, _ = _level_columns(filtered, level)
+        counts = filtered.groupby(id_col).size()
+        valid = counts[counts >= min_clade_size].index.tolist()
+        filtered = filtered[filtered[id_col].isin(valid)]
+
+    resolved_lca_nodes = _resolve_hierarchical_lca_nodes(filtered, tree)
+
+    results: Dict[str, Dict[str, object]] = {}
+    hierarchical_pairs = build_hierarchical_sister_pairs(filtered, tree_path)
+    level_name_map = {
+        "groups": "group",
+        "families": "family",
+        "subfamilies": "subfamily",
+    }
+    for level in ("groups", "families", "subfamilies"):
+        result = _compute_level_scores(
+            level=level_name_map[level],
+            alignment=alignment,
+            assignments=filtered,
+            ancestral_seqs=ancestral_seqs,
+            state_data=state_data,
+            pairs=hierarchical_pairs[level],
+            resolved_lca_nodes=resolved_lca_nodes,
+        )
+        results[level] = result
+
+    return results
 
 
 def identify_sdps(scores_df: pd.DataFrame, percentile: float = 95.0) -> Tuple[pd.DataFrame, float]:
-    """
-    Identify Specificity Determining Positions (SDPs) at the given percentile.
-    
-    Args:
-        scores_df: DataFrame from compute_badasp_scores
-        percentile: Percentile threshold (default 95 for 95th percentile)
-        
-    Returns:
-        Tuple of (SDP DataFrame, threshold value)
-    """
-    threshold = np.percentile(scores_df["badasp_score"], percentile)
+    if "switch_count" in scores_df.columns:
+        max_switch_count = scores_df["switch_count"].max()
+        sdps = scores_df[scores_df["switch_count"] == max_switch_count].copy()
+        sdps = sdps.sort_values(["switch_count", "max_score"], ascending=[False, False]).reset_index(drop=True)
+        threshold = float(scores_df["global_threshold"].iloc[0]) if "global_threshold" in scores_df.columns and not scores_df.empty else float(np.percentile(scores_df["badasp_score"], percentile))
+        return sdps, threshold
+
+    threshold = float(np.percentile(scores_df["badasp_score"], percentile))
     sdps = scores_df[scores_df["badasp_score"] >= threshold].copy()
     sdps = sdps.sort_values("badasp_score", ascending=False).reset_index(drop=True)
-    
     return sdps, threshold
 
 
 class BADASPCore:
-    """
-    Wrapper class for restricted BADASP scoring pipeline.
-    
-    Usage:
-        core = BADASPCore(alignment_path, assignments_path, ancestral_path, state_path, 
-                         clusters_path=clusters_path)
-        scores = core.compute_scores()
-        sdps, threshold = core.identify_sdps()
-        core.save_results(output_dir)
-    """
-    
     def __init__(
         self,
         alignment_path: Path,
         assignments_path: Path,
         ancestral_path: Path,
         state_path: Path,
-        clusters_path: Optional[Path] = None,
+        tree_path: Path,
         min_clade_size: int = 5,
     ):
         self.alignment_path = Path(alignment_path)
         self.assignments_path = Path(assignments_path)
         self.ancestral_path = Path(ancestral_path)
         self.state_path = Path(state_path)
-        self.clusters_path = Path(clusters_path) if clusters_path else None
+        self.tree_path = Path(tree_path)
         self.min_clade_size = min_clade_size
-        
-        self.scores = None
+        self.results = None
         self.sdps = None
-        self.threshold = None
-    
-    def compute_scores(self) -> pd.DataFrame:
-        """Compute BADASP scores for all positions."""
-        self.scores = compute_badasp_scores(
-            self.alignment_path,
-            self.assignments_path,
-            self.ancestral_path,
-            self.state_path,
-            clusters_path=self.clusters_path,
+        self.thresholds = None
+
+    def compute_scores(self) -> Dict[str, Dict[str, object]]:
+        self.results = compute_multilevel_badasp_scores(
+            alignment_path=self.alignment_path,
+            assignments_path=self.assignments_path,
+            ancestral_path=self.ancestral_path,
+            state_path=self.state_path,
+            tree_path=self.tree_path,
             min_clade_size=self.min_clade_size,
         )
-        logger.info(f"BADASP scores computed for {len(self.scores)} positions")
-        return self.scores
-    
-    def identify_sdps(self, percentile: float = 95.0) -> Tuple[pd.DataFrame, float]:
-        """Identify SDPs at given percentile."""
-        if self.scores is None:
+        logger.info("BADASP multilevel scores computed")
+        return self.results
+
+    def identify_sdps(self) -> Tuple[Dict[str, pd.DataFrame], Dict[str, float]]:
+        if self.results is None:
             self.compute_scores()
-        
-        self.sdps, self.threshold = identify_sdps(self.scores, percentile=percentile)
-        logger.info(f"SDPs identified: {len(self.sdps)} positions above {percentile}th percentile (threshold: {self.threshold:.4f})")
-        return self.sdps, self.threshold
-    
-    def save_results(self, output_dir: Path):
-        """Save full scores and SDP table to output directory."""
+        assert self.results is not None
+        self.sdps = {level: payload["sdps"] for level, payload in self.results.items()}
+        self.thresholds = {level: payload["threshold"] for level, payload in self.results.items()}
+        return self.sdps, self.thresholds
+
+    def save_results(self, output_dir: Path) -> None:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        
-        if self.scores is None:
+        if self.results is None:
             raise ValueError("Run compute_scores() first")
-        
-        scores_path = output_dir / "badasp_scores.csv"
-        self.scores.to_csv(scores_path, index=False)
-        logger.info(f"Full BADASP scores saved to {scores_path}")
-        
-        if self.sdps is not None:
-            sdp_path = output_dir / "badasp_sdps.csv"
-            self.sdps.to_csv(sdp_path, index=False)
-            logger.info(f"SDP table saved to {sdp_path}")
+        for level, payload in self.results.items():
+            score_path = output_dir / f"badasp_scores_{level}.csv"
+            payload["scores"].to_csv(score_path, index=False)
+            if payload["sdps"] is not None:
+                sdp_path = output_dir / f"badasp_sdps_{level}.csv"
+                payload["sdps"].to_csv(sdp_path, index=False)

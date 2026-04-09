@@ -84,6 +84,28 @@ def _read_clade_members(assignments_csv: Path) -> Dict[int, List[str]]:
     return clades
 
 
+def _read_hierarchical_lca_members(assignments_csv: Path) -> Dict[str, List[str]]:
+    members_by_node: Dict[str, List[str]] = defaultdict(list)
+    with assignments_csv.open("r", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames:
+            return members_by_node
+
+        lca_columns = [col for col in reader.fieldnames if col.endswith("_lca_node")]
+        if not lca_columns:
+            return members_by_node
+
+        for row in reader:
+            sequence_id = (row.get("sequence_id") or "").strip()
+            if not sequence_id:
+                continue
+            for col in lca_columns:
+                value = (row.get(col) or "").strip()
+                if value and sequence_id not in members_by_node[value]:
+                    members_by_node[value].append(sequence_id)
+    return members_by_node
+
+
 def extract_lca_ancestral_sequences(
     tree_path: Path,
     assignments_csv: Path,
@@ -91,34 +113,61 @@ def extract_lca_ancestral_sequences(
     output_fasta: Path,
     min_clade_size: int = 5,
 ) -> int:
-    tree = Phylo.read(str(tree_path), "newick")
-    clades = _read_clade_members(assignments_csv)
+    hierarchical_nodes = _read_hierarchical_lca_members(assignments_csv)
 
     records: List[SeqRecord] = []
-    seen_nodes = set()
 
-    for clade_id, members in sorted(clades.items()):
-        if len(members) < min_clade_size:
-            continue
-
-        lca_node = tree.common_ancestor(members)
-        if not lca_node.name:
-            raise ValueError(f"LCA node for clade {clade_id} has no node name in ASR tree.")
-
-        node_id = lca_node.name
-        if node_id in seen_nodes:
-            continue
-        if node_id not in node_sequences:
-            raise KeyError(f"No ancestral sequence found for LCA node {node_id}.")
-
-        seen_nodes.add(node_id)
-        records.append(
-            SeqRecord(
-                Seq(node_sequences[node_id]),
-                id=node_id,
-                description=f"clade_id={clade_id};member_count={len(members)}",
+    # New hierarchical format: extract all unique LCA nodes across
+    # group_lca_node/family_lca_node/subfamily_lca_node (and any *_lca_node columns).
+    if hierarchical_nodes:
+        tree = Phylo.read(str(tree_path), "newick")
+        seen_nodes = set()
+        for node_id in sorted(hierarchical_nodes):
+            members = hierarchical_nodes[node_id]
+            lca_node = tree.common_ancestor(members)
+            resolved_node_id = lca_node.name
+            if not resolved_node_id:
+                raise ValueError(f"LCA node for {node_id} has no node name in ASR tree.")
+            if resolved_node_id in seen_nodes:
+                continue
+            if resolved_node_id not in node_sequences:
+                raise KeyError(f"No ancestral sequence found for LCA node {resolved_node_id}.")
+            seen_nodes.add(resolved_node_id)
+            records.append(
+                SeqRecord(
+                    Seq(node_sequences[resolved_node_id]),
+                    id=resolved_node_id,
+                    description="source=hierarchy_mapping",
+                )
             )
-        )
+    else:
+        # Backward-compatible fallback for legacy single-level assignments.
+        tree = Phylo.read(str(tree_path), "newick")
+        clades = _read_clade_members(assignments_csv)
+        seen_nodes = set()
+
+        for clade_id, members in sorted(clades.items()):
+            if len(members) < min_clade_size:
+                continue
+
+            lca_node = tree.common_ancestor(members)
+            if not lca_node.name:
+                raise ValueError(f"LCA node for clade {clade_id} has no node name in ASR tree.")
+
+            node_id = lca_node.name
+            if node_id in seen_nodes:
+                continue
+            if node_id not in node_sequences:
+                raise KeyError(f"No ancestral sequence found for LCA node {node_id}.")
+
+            seen_nodes.add(node_id)
+            records.append(
+                SeqRecord(
+                    Seq(node_sequences[node_id]),
+                    id=node_id,
+                    description=f"clade_id={clade_id};member_count={len(members)}",
+                )
+            )
 
     output_fasta.parent.mkdir(parents=True, exist_ok=True)
     SeqIO.write(records, str(output_fasta), "fasta")
