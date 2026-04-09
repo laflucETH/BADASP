@@ -133,6 +133,10 @@
   - Groups: 1.354551, top SDP position 12 (switch_count = 11, max_score = 1.446354)
   - Families: 1.366446, top SDP position 27 (switch_count = 56, max_score = 1.631724)
   - Subfamilies: 1.384612, top SDP position 44 (switch_count = 141, max_score = 1.666147)
+- Hierarchical comparative visualizations:
+  - Score distributions: `results/badasp_scoring/hierarchical_distributions.svg`
+  - Switch counts across the alignment: `results/badasp_scoring/hierarchical_switch_counts.svg`
+- Test coverage: 27 tests passing in the current suite
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -160,9 +164,9 @@
   - Hierarchical ASR node extraction support: complete
   - Sister-clade switch-count aggregation: complete
   - BADASP score calculation: complete
-  - All tests passing: complete (25/25)
+  - Hierarchical comparative visualizations: complete
+  - All tests passing: complete (27/27)
 
 ## Pending (Before Phase 6)
-- Rerun the Phase 4/Phase 5 pipeline on the full hierarchical outputs and review the per-level score tables / SDP summaries.
 - User review/approval of Phase 5 BADASP outputs and SDP table
 - Decision on Phase 6: Structural & Statistical Mapping of SDPs to PDB structures

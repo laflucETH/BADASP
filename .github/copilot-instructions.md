@@ -26,3 +26,9 @@
 ## README Maintenance
 - Maintain `README.md` continuously.
 - Keep `README.md` current with: project purpose, current status, methodology, and directory structure.
+
+## Methodological Rules
+- Topological Hierarchy: The pipeline strictly uses a 3-level hierarchy (Groups, Families, Subfamilies) derived from dynamic tree cutting, not a flat structure.
+- BADASP Scoring: Scoring uses the Bradley et al. (2019) subtractive formula, `Score = RC - (AC * p_ac)`.
+- Pairwise Logic: Scores are calculated exclusively between nearest sister-clades within the same parent hierarchy, avoiding global squashing.
+- SDP Definition: Specificity Determining Positions are defined by counting threshold-exceeding switches, not by raw score averaging.

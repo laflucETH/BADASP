@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pandas as pd
 from scipy.cluster.hierarchy import linkage
 
 from src.visualization import (
@@ -72,3 +73,97 @@ def test_plot_topological_dendrogram_writes_svg(tmp_path: Path) -> None:
 
     assert out_svg.exists()
     assert out_svg.stat().st_size > 0
+
+
+def test_plot_hierarchical_badasp_distributions_writes_svg(tmp_path: Path) -> None:
+    from src.visualization import plot_hierarchical_badasp_distributions
+
+    group_scores = tmp_path / "groups.csv"
+    family_scores = tmp_path / "families.csv"
+    subfamily_scores = tmp_path / "subfamilies.csv"
+    output_svg = tmp_path / "hierarchical_distributions.svg"
+
+    pd.DataFrame(
+        {
+            "position": [1, 2, 3],
+            "max_score": [0.5, 1.0, 1.5],
+            "switch_count": [1, 2, 3],
+            "global_threshold": [1.2, 1.2, 1.2],
+            "badasp_score": [0.5, 1.0, 1.5],
+        }
+    ).to_csv(group_scores, index=False)
+    pd.DataFrame(
+        {
+            "position": [1, 2, 3],
+            "max_score": [0.2, 0.7, 1.1],
+            "switch_count": [0, 1, 2],
+            "global_threshold": [0.9, 0.9, 0.9],
+            "badasp_score": [0.2, 0.7, 1.1],
+        }
+    ).to_csv(family_scores, index=False)
+    pd.DataFrame(
+        {
+            "position": [1, 2, 3],
+            "max_score": [0.1, 0.4, 0.9],
+            "switch_count": [2, 1, 0],
+            "global_threshold": [0.6, 0.6, 0.6],
+            "badasp_score": [0.1, 0.4, 0.9],
+        }
+    ).to_csv(subfamily_scores, index=False)
+
+    plot_hierarchical_badasp_distributions(
+        group_scores=group_scores,
+        family_scores=family_scores,
+        subfamily_scores=subfamily_scores,
+        output_svg=output_svg,
+    )
+
+    assert output_svg.exists()
+    assert output_svg.stat().st_size > 0
+
+
+def test_plot_hierarchical_switch_counts_writes_svg(tmp_path: Path) -> None:
+    from src.visualization import plot_hierarchical_switch_counts
+
+    group_scores = tmp_path / "groups.csv"
+    family_scores = tmp_path / "families.csv"
+    subfamily_scores = tmp_path / "subfamilies.csv"
+    output_svg = tmp_path / "hierarchical_switch_counts.svg"
+
+    pd.DataFrame(
+        {
+            "position": [1, 2, 3],
+            "max_score": [0.5, 1.0, 1.5],
+            "switch_count": [1, 2, 3],
+            "global_threshold": [1.2, 1.2, 1.2],
+            "badasp_score": [0.5, 1.0, 1.5],
+        }
+    ).to_csv(group_scores, index=False)
+    pd.DataFrame(
+        {
+            "position": [1, 2, 3],
+            "max_score": [0.2, 0.7, 1.1],
+            "switch_count": [0, 1, 2],
+            "global_threshold": [0.9, 0.9, 0.9],
+            "badasp_score": [0.2, 0.7, 1.1],
+        }
+    ).to_csv(family_scores, index=False)
+    pd.DataFrame(
+        {
+            "position": [1, 2, 3],
+            "max_score": [0.1, 0.4, 0.9],
+            "switch_count": [2, 1, 0],
+            "global_threshold": [0.6, 0.6, 0.6],
+            "badasp_score": [0.1, 0.4, 0.9],
+        }
+    ).to_csv(subfamily_scores, index=False)
+
+    plot_hierarchical_switch_counts(
+        group_scores=group_scores,
+        family_scores=family_scores,
+        subfamily_scores=subfamily_scores,
+        output_svg=output_svg,
+    )
+
+    assert output_svg.exists()
+    assert output_svg.stat().st_size > 0

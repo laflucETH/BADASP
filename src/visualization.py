@@ -4,7 +4,9 @@ from typing import List, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib.lines import Line2D
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from Bio import SeqIO
 from scipy.cluster.hierarchy import dendrogram, set_link_color_palette
@@ -15,6 +17,13 @@ def default_plot_paths() -> Tuple[Path, Path, Path]:
         Path("results/sequence_filtering/raw_length_dist.svg"),
         Path("results/alignment_qc/msa_gap_profile.svg"),
         Path("results/topological_clustering/tree_dendrogram.svg"),
+    )
+
+
+def default_hierarchical_badasp_plot_paths() -> Tuple[Path, Path]:
+    return (
+        Path("results/badasp_scoring/hierarchical_distributions.svg"),
+        Path("results/badasp_scoring/hierarchical_switch_counts.svg"),
     )
 
 
@@ -94,22 +103,129 @@ def plot_topological_dendrogram(
     plt.close()
 
 
+def _load_score_table(score_path: Path) -> pd.DataFrame:
+    df = pd.read_csv(score_path)
+    required_columns = {"position", "switch_count", "global_threshold", "badasp_score"}
+    missing = required_columns - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns in {score_path}: {sorted(missing)}")
+    return df
+
+
+def plot_hierarchical_badasp_distributions(
+    group_scores: Path,
+    family_scores: Path,
+    subfamily_scores: Path,
+    output_svg: Path,
+) -> None:
+    score_tables = {
+        "Groups": _load_score_table(group_scores),
+        "Families": _load_score_table(family_scores),
+        "Subfamilies": _load_score_table(subfamily_scores),
+    }
+    colors = {
+        "Groups": "#1F77B4",
+        "Families": "#D95F02",
+        "Subfamilies": "#2CA02C",
+    }
+
+    output_svg.parent.mkdir(parents=True, exist_ok=True)
+    plt.figure(figsize=(11, 6))
+
+    for label, df in score_tables.items():
+        scores = df["badasp_score"].astype(float).to_numpy()
+        threshold = float(df["global_threshold"].iloc[0])
+        sns.kdeplot(scores, label=label, color=colors[label], linewidth=2.0, fill=False)
+        plt.axvline(threshold, color=colors[label], linestyle="--", linewidth=1.5, alpha=0.8)
+
+    threshold_legend = [
+        Line2D([0], [0], color=colors[label], linestyle="--", linewidth=1.5, label=f"{label} 95th pct.")
+        for label in score_tables
+    ]
+    density_legend = [
+        Line2D([0], [0], color=colors[label], linewidth=2.0, label=label)
+        for label in score_tables
+    ]
+    plt.legend(handles=density_legend + threshold_legend, loc="best", frameon=False, ncol=2)
+    plt.title("Hierarchical BADASP Score Distributions")
+    plt.xlabel("Raw BADASP Score")
+    plt.ylabel("Density")
+    plt.tight_layout()
+    plt.savefig(output_svg, format="svg")
+    plt.close()
+
+
+def plot_hierarchical_switch_counts(
+    group_scores: Path,
+    family_scores: Path,
+    subfamily_scores: Path,
+    output_svg: Path,
+) -> None:
+    score_tables = [
+        ("Groups", _load_score_table(group_scores), "#1F77B4"),
+        ("Families", _load_score_table(family_scores), "#D95F02"),
+        ("Subfamilies", _load_score_table(subfamily_scores), "#2CA02C"),
+    ]
+
+    output_svg.parent.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
+
+    for ax, (label, df, color) in zip(axes, score_tables):
+        positions = df["position"].astype(int).to_numpy()
+        switch_counts = df["switch_count"].astype(int).to_numpy()
+        ax.bar(positions, switch_counts, color=color, width=1.0, alpha=0.9)
+        ax.set_ylabel("Switches")
+        ax.set_title(label)
+        ax.set_xlim(1, int(positions.max()))
+        ax.set_ylim(0, max(1, int(switch_counts.max())) + 1)
+
+    axes[-1].set_xlabel("Alignment Position")
+    fig.suptitle("Hierarchical BADASP Switch Counts Across the Alignment", y=0.995)
+    fig.tight_layout()
+    fig.savefig(output_svg, format="svg")
+    plt.close(fig)
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="QC visualizations for sequence lengths and MSA gap profile.")
+    parser = argparse.ArgumentParser(description="QC and hierarchical BADASP visualizations.")
     default_length_out, default_gap_out, _ = default_plot_paths()
+    default_hier_dist_out, default_hier_switch_out = default_hierarchical_badasp_plot_paths()
     parser.add_argument("--fasta", default=None, help="Input FASTA for length distribution plot.")
     parser.add_argument("--length-output", default=str(default_length_out))
     parser.add_argument("--msa", default=None, help="Input MSA FASTA for gap-per-column plot.")
     parser.add_argument("--gap-output", default=str(default_gap_out))
+    parser.add_argument("--group-scores", default="results/badasp_scoring/badasp_scores_groups.csv")
+    parser.add_argument("--family-scores", default="results/badasp_scoring/badasp_scores_families.csv")
+    parser.add_argument("--subfamily-scores", default="results/badasp_scoring/badasp_scores_subfamilies.csv")
+    parser.add_argument("--hierarchical-distribution-output", default=str(default_hier_dist_out))
+    parser.add_argument("--hierarchical-switch-output", default=str(default_hier_switch_out))
+    parser.add_argument("--hierarchical-only", action="store_true")
     args = parser.parse_args()
 
-    if args.fasta:
+    if args.fasta and not args.hierarchical_only:
         plot_sequence_length_distribution(Path(args.fasta), Path(args.length_output))
         print(f"Saved length distribution: {args.length_output}")
 
-    if args.msa:
+    if args.msa and not args.hierarchical_only:
         plot_gap_percentage_per_column(Path(args.msa), Path(args.gap_output))
         print(f"Saved gap profile: {args.gap_output}")
+
+    if Path(args.group_scores).exists() and Path(args.family_scores).exists() and Path(args.subfamily_scores).exists():
+        plot_hierarchical_badasp_distributions(
+            group_scores=Path(args.group_scores),
+            family_scores=Path(args.family_scores),
+            subfamily_scores=Path(args.subfamily_scores),
+            output_svg=Path(args.hierarchical_distribution_output),
+        )
+        print(f"Saved hierarchical score distributions: {args.hierarchical_distribution_output}")
+
+        plot_hierarchical_switch_counts(
+            group_scores=Path(args.group_scores),
+            family_scores=Path(args.family_scores),
+            subfamily_scores=Path(args.subfamily_scores),
+            output_svg=Path(args.hierarchical_switch_output),
+        )
+        print(f"Saved hierarchical switch counts: {args.hierarchical_switch_output}")
 
 
 if __name__ == "__main__":
