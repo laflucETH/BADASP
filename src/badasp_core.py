@@ -399,11 +399,23 @@ def compute_multilevel_badasp_scores(
         asr_tree = Phylo.read(str(asr_tree_path), "newick")
 
     filtered = assignments.copy()
+    level_label = {
+        "group": "Groups",
+        "family": "Families",
+        "subfamily": "Subfamilies",
+    }
     for level in ("group", "family", "subfamily"):
         id_col, _ = _level_columns(filtered, level)
+        pre_counts = filtered.groupby(id_col).size()
+        pre_cluster_count = int(pre_counts.shape[0])
         counts = filtered.groupby(id_col).size()
         valid = counts[counts >= min_clade_size].index.tolist()
         filtered = filtered[filtered[id_col].isin(valid)]
+        post_cluster_count = int(len(valid))
+        dropped_cluster_count = pre_cluster_count - post_cluster_count
+        print(
+            f"{level_label[level]}: {post_cluster_count} kept, {dropped_cluster_count} dropped (size < {min_clade_size})"
+        )
 
     resolved_lca_nodes = _resolve_hierarchical_lca_nodes(filtered, asr_tree)
 

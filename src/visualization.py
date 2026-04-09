@@ -11,7 +11,7 @@ import pandas as pd
 import seaborn as sns
 from Bio import Phylo, SeqIO
 from Bio.Phylo.BaseTree import Clade, Tree
-from scipy.cluster.hierarchy import dendrogram, set_link_color_palette
+from scipy.cluster.hierarchy import dendrogram, fcluster, set_link_color_palette
 
 
 def default_plot_paths() -> Tuple[Path, Path, Path]:
@@ -479,6 +479,7 @@ def plot_dendrogram_with_switches(
     output_svg: Path,
     title: str,
     color_threshold: float,
+    min_clade_size: int = 5,
 ) -> None:
     from src.tree_cluster import tree_to_linkage
 
@@ -509,6 +510,21 @@ def plot_dendrogram_with_switches(
         leaves_order=[int(idx) for idx in dendro_meta["leaves"]],
     )
     descendant_to_node = {desc: node_id for node_id, desc in descendants.items() if node_id >= len(labels)}
+
+    leaf_cluster_ids = [int(x) for x in fcluster(linkage_matrix, t=float(color_threshold), criterion="distance")]
+    cluster_to_leaf_set: Dict[int, set] = defaultdict(set)
+    for leaf_idx, cluster_id in enumerate(leaf_cluster_ids):
+        cluster_to_leaf_set[cluster_id].add(leaf_idx)
+    underrepresented_leaf_sets = [leaf_set for leaf_set in cluster_to_leaf_set.values() if len(leaf_set) < min_clade_size]
+
+    ignored_node_ids = set()
+    for node_id, leaf_set in descendants.items():
+        if node_id < len(labels):
+            continue
+        for ignored_leaf_set in underrepresented_leaf_sets:
+            if leaf_set.issubset(ignored_leaf_set):
+                ignored_node_ids.add(node_id)
+                break
 
     assignments = pd.read_csv(assignments_path)
     cluster_members = assignments.groupby(id_col)["sequence_id"].apply(list).to_dict()
@@ -562,6 +578,27 @@ def plot_dendrogram_with_switches(
     )
     set_link_color_palette(None)
 
+    # Gray-out all branches that correspond to clades excluded by min_clade_size.
+    ax = plt.gca()
+    n_leaves = linkage_matrix.shape[0] + 1
+    for i, row in enumerate(linkage_matrix):
+        node_id = n_leaves + i
+        if node_id not in ignored_node_ids:
+            continue
+        left = int(row[0])
+        right = int(row[1])
+        y_parent = y_by_node[node_id]
+        x_left = x_by_node[left]
+        y_left = y_by_node[left]
+        x_right = x_by_node[right]
+        y_right = y_by_node[right]
+
+        # Horizontal connector at the merge height.
+        ax.plot([x_left, x_right], [y_parent, y_parent], color="#CCCCCC", linewidth=1.4, zorder=4)
+        # Vertical stems from children to the merge.
+        ax.plot([x_left, x_left], [y_left, y_parent], color="#CCCCCC", linewidth=1.4, zorder=4)
+        ax.plot([x_right, x_right], [y_right, y_parent], color="#CCCCCC", linewidth=1.4, zorder=4)
+
     if mapped_coordinates:
         switch_values = np.array([entry[2] for entry in mapped_coordinates], dtype=float)
         max_val = float(switch_values.max()) if len(switch_values) else 1.0
@@ -603,6 +640,7 @@ def generate_dendrogram_switch_plots(
     group_threshold: float,
     family_threshold: float,
     subfamily_threshold: float,
+    min_clade_size: int = 5,
 ) -> None:
     plot_dendrogram_with_switches(
         tree_path=tree_path,
@@ -612,6 +650,7 @@ def generate_dendrogram_switch_plots(
         output_svg=output_groups_svg,
         title="Groups Dendrogram with Switch Events",
         color_threshold=group_threshold,
+        min_clade_size=min_clade_size,
     )
     plot_dendrogram_with_switches(
         tree_path=tree_path,
@@ -621,6 +660,7 @@ def generate_dendrogram_switch_plots(
         output_svg=output_families_svg,
         title="Families Dendrogram with Switch Events",
         color_threshold=family_threshold,
+        min_clade_size=min_clade_size,
     )
     plot_dendrogram_with_switches(
         tree_path=tree_path,
@@ -630,6 +670,7 @@ def generate_dendrogram_switch_plots(
         output_svg=output_subfamilies_svg,
         title="Subfamilies Dendrogram with Switch Events",
         color_threshold=subfamily_threshold,
+        min_clade_size=min_clade_size,
     )
 
 
@@ -665,6 +706,7 @@ def main() -> None:
     parser.add_argument("--group-threshold", type=float, default=8.579924)
     parser.add_argument("--family-threshold", type=float, default=6.929765)
     parser.add_argument("--subfamily-threshold", type=float, default=4.729553)
+    parser.add_argument("--min-clade-size", type=int, default=5)
     parser.add_argument("--hierarchical-only", action="store_true")
     args = parser.parse_args()
 
@@ -717,6 +759,7 @@ def main() -> None:
             group_threshold=float(args.group_threshold),
             family_threshold=float(args.family_threshold),
             subfamily_threshold=float(args.subfamily_threshold),
+            min_clade_size=int(args.min_clade_size),
         )
         print(f"Saved dendrogram switches plot (groups): {args.dendrogram_switch_groups_output}")
         print(f"Saved dendrogram switches plot (families): {args.dendrogram_switch_families_output}")
