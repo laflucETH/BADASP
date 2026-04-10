@@ -313,44 +313,48 @@ class TestChimeraXScriptGeneration:
             for residue in expected_residues:
                 assert f":{residue}" in content
 
-    def test_chimerax_scripts_include_key_legends(self):
+    def test_chimerax_scripts_include_standalone_png_legends(self):
         """
-        Verify that each ChimeraX script ends with a 2D key legend using integer count bounds.
+        Verify that each level has a standalone PNG colorbar legend.
 
         Expected:
-        - key command appears in each script
-        - key command uses the min/max switch_count values from the level's score table
+        - legend_groups.png, legend_families.png, legend_subfamilies.png are generated
+        - files are non-empty raster artifacts
         """
         alignment_path = Path("data/interim/IPR019888_trimmed.aln")
         mapper = PDBMapper(pdb_id="2cg4")
-        outputs = mapper.generate_chimerax_scripts(
-            alignment_path=alignment_path,
-            sdp_csv_groups=Path("results/badasp_scoring/badasp_scores_groups.csv"),
-            sdp_csv_families=Path("results/badasp_scoring/badasp_scores_families.csv"),
-            sdp_csv_subfamilies=Path("results/badasp_scoring/badasp_scores_subfamilies.csv"),
-            output_dir=Path("/tmp"),
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            mapper.generate_chimerax_scripts(
+                alignment_path=alignment_path,
+                sdp_csv_groups=Path("results/badasp_scoring/badasp_scores_groups.csv"),
+                sdp_csv_families=Path("results/badasp_scoring/badasp_scores_families.csv"),
+                sdp_csv_subfamilies=Path("results/badasp_scoring/badasp_scores_subfamilies.csv"),
+                output_dir=output_dir,
+            )
 
-        expected_bounds = {
-            "groups": tuple(
-                __import__("pandas").read_csv("results/badasp_scoring/badasp_scores_groups.csv").query("switch_count > 0")["switch_count"].agg(["min", "max"]).astype(int).tolist()
-            ),
-            "families": tuple(
-                __import__("pandas").read_csv("results/badasp_scoring/badasp_scores_families.csv").query("switch_count > 0")["switch_count"].agg(["min", "max"]).astype(int).tolist()
-            ),
-            "subfamilies": tuple(
-                __import__("pandas").read_csv("results/badasp_scoring/badasp_scores_subfamilies.csv").query("switch_count > 0")["switch_count"].agg(["min", "max"]).astype(int).tolist()
-            ),
-        }
+            for legend_name in ("legend_groups.png", "legend_families.png", "legend_subfamilies.png"):
+                legend_path = output_dir / legend_name
+                assert legend_path.exists()
+                assert legend_path.stat().st_size > 0
 
-        for level, script_path in outputs.items():
-            content = script_path.read_text().strip().splitlines()
-            key_lines = [line for line in content if line.startswith("key ")]
-            assert key_lines, f"Missing key command in {script_path}"
-            min_count, max_count = expected_bounds[level]
-            assert f" {min_count} " in key_lines[-1]
-            assert f" {max_count} " in key_lines[-1]
-            assert key_lines[-1].endswith(f'title "{level.capitalize()} Switches"')
+    def test_chimerax_scripts_do_not_use_key_command(self):
+        """Ensure we avoid ChimeraX key syntax due to the palette lookup bug."""
+        alignment_path = Path("data/interim/IPR019888_trimmed.aln")
+        mapper = PDBMapper(pdb_id="2cg4")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            outputs = mapper.generate_chimerax_scripts(
+                alignment_path=alignment_path,
+                sdp_csv_groups=Path("results/badasp_scoring/badasp_scores_groups.csv"),
+                sdp_csv_families=Path("results/badasp_scoring/badasp_scores_families.csv"),
+                sdp_csv_subfamilies=Path("results/badasp_scoring/badasp_scores_subfamilies.csv"),
+                output_dir=output_dir,
+            )
+
+            for script_path in outputs.values():
+                content = script_path.read_text()
+                assert "\nkey " not in content
 
 
 class TestPDBMapperEndToEnd:

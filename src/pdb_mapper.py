@@ -4,10 +4,13 @@ import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import pandas as pd
 from Bio import SeqIO
 from Bio.Align import PairwiseAligner
 from Bio.PDB import MMCIFParser, PDBList, PDBParser, Polypeptide
+from matplotlib.colorbar import ColorbarBase
 
 
 class PDBMapper:
@@ -328,13 +331,47 @@ class PDBMapper:
             for residue, color_hex in residue_pairs:
                 lines.append(f"color :{residue} {color_hex}")
 
-            lines.append(f"key {low_hex} {min_switch_count} {high_hex} {max_switch_count} title \"{level_label} Switches\"")
             lines.append(f"# {level_label.lower()}_residues: {selector}")
         else:
             lines.append(f"# {level_label.lower()}_residues: none")
-            lines.append(f"key {low_hex} 0 {high_hex} 0 title \"{level_label} Switches\"")
 
         output_path.write_text("\n".join(lines) + "\n")
+        return output_path
+
+    def _write_switch_legend_png(
+        self,
+        output_path: Path,
+        low_hex: str,
+        high_hex: str,
+        min_switch_count: int,
+        max_switch_count: int,
+        level_label: str,
+    ) -> Path:
+        """Write a standalone high-resolution colorbar legend PNG for one level."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        vmin = int(min_switch_count)
+        vmax = int(max_switch_count)
+        if vmax < vmin:
+            vmin, vmax = 0, 0
+        if vmax == vmin:
+            # ColorbarBase requires a non-zero normalization range.
+            vmax = vmin + 1
+
+        cmap = mcolors.LinearSegmentedColormap.from_list(
+            f"{level_label.lower()}_switch_cmap",
+            [low_hex, high_hex],
+        )
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+        fig, ax = plt.subplots(figsize=(5.5, 1.2), dpi=300)
+        cbar = ColorbarBase(ax, cmap=cmap, norm=norm, orientation="horizontal")
+        cbar.set_label("Number of Switches")
+        cbar.set_ticks([vmin, vmax])
+        cbar.set_ticklabels([str(int(min_switch_count)), str(int(max_switch_count))])
+        ax.set_title(f"{level_label} Switches")
+        fig.tight_layout()
+        fig.savefig(output_path, format="png", dpi=300)
+        plt.close(fig)
         return output_path
 
     def generate_chimerax_scripts(
@@ -379,6 +416,14 @@ class PDBMapper:
                 max_switch_count,
                 low_hex,
                 high_hex,
+            )
+            self._write_switch_legend_png(
+                output_path=output_dir / f"legend_{level}.png",
+                low_hex=low_hex,
+                high_hex=high_hex,
+                min_switch_count=min_switch_count,
+                max_switch_count=max_switch_count,
+                level_label=level.capitalize(),
             )
             level_outputs[level] = output_path
         return level_outputs

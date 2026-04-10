@@ -182,12 +182,17 @@
     - `results/structural_mapping/highlight_sdps_groups.cxc`
     - `results/structural_mapping/highlight_sdps_families.cxc`
     - `results/structural_mapping/highlight_sdps_subfamilies.cxc`
+  - Standalone publication legends:
+    - `results/structural_mapping/legend_groups.png`
+    - `results/structural_mapping/legend_families.png`
+    - `results/structural_mapping/legend_subfamilies.png`
   - PyMOL script support implemented in module API (`generate_pymol_script`)
   - Source tables: `results/badasp_scoring/badasp_scores_{groups,families,subfamilies}.csv` filtered to `switch_count > 0`
 - Publication-quality ChimeraX rendering profile (Figure 2-style upgrade):
   - Separate per-level scripts instead of one combined file
   - Every mapped switch position (`switch_count > 0`) is colored with a yellow -> red gradient
-  - 2D viewport legend added at the bottom of each script via ChimeraX `key` command using the level-specific integer switch_count bounds
+  - Direct per-residue hex color assignment only (`color :RESIDUE #HEX`) to avoid ChimeraX `key` palette parsing issues
+  - Standalone high-resolution PNG colorbars generated with matplotlib for figure assembly
   - Rendering directives embedded in script header:
     - `set bgColor white`
     - `lighting soft`
