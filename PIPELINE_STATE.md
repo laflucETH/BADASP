@@ -3,7 +3,7 @@
 ## Project
 - Name: BADASP replication pipeline for IPR019888 (PF13404 track included)
 - Mode: Reproducible, modular Python workflow
-- Current date: 2026-04-07
+- Current date: 2026-04-10
 
 ## Architecture Snapshot
 - Active root workspace now contains a fresh Phase 1 scaffold.
@@ -168,7 +168,25 @@
     - Families: 23 pairs with switches, 21 mapped scatter coordinates
     - Subfamilies: 78 pairs with switches, 72 mapped scatter coordinates
 - Distribution source for all score-density plots: raw pairwise score tables (`raw_pairwise_*.csv`), with 95th percentile lines derived from the same raw distributions
-- Test coverage: 32 tests passing in the current suite
+- Test coverage: 45 tests passing in the current suite
+
+## Phase 6 Metrics (Structural Mapping)
+- Implementation: TDD-first with `src/pdb_mapper.py` and `tests/test_pdb_mapper.py`
+- PDB download support: `Bio.PDB.PDBList` with local caching in `data/raw/`
+- Sequence-to-structure mapping:
+  - Representative sequence selected from `data/interim/IPR019888_trimmed.aln`
+  - Pairwise alignment engine: `Bio.Align.PairwiseAligner` (global mode)
+  - Mapping output contract: `msa_column_index -> pdb_residue_number`
+- Structural script outputs:
+  - ChimeraX script: `results/structural_mapping/highlight_sdps.cxc`
+  - PyMOL script support implemented in module API (`generate_pymol_script`)
+- Hierarchy coloring in generated scripts:
+  - Groups: red
+  - Families: blue
+  - Subfamilies: green
+- CLI execution status:
+  - Command run: `python -m src.pdb_mapper --pdb-id 2cg4 --alignment data/interim/IPR019888_trimmed.aln --scores-dir results/badasp_scoring --output-cxc results/structural_mapping/highlight_sdps.cxc --top-n 10`
+  - Confirmation: `Generated ChimeraX script: results/structural_mapping/highlight_sdps.cxc`
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -202,18 +220,19 @@
   - Min_clade_size filter audit logging: complete
   - Visual gray-out of ignored clades: complete
   - All tests passing: complete (33/33)
-- **Phase 6 (Structural Mapping): in progress**
-  - TDD scaffold setup: pending
-  - PDB downloader function: pending
-  - Sequence-to-structure alignment: pending
-  - PyMOL script generator: pending
-  - Structural annotation module implementation: pending
-- **Phase 7 (Evolutionary & Physicochemical Analysis): pending**
+- **Phase 6 (Structural Mapping): complete, user review pending**
+  - TDD scaffold setup: complete
+  - PDB downloader function: complete
+  - Sequence-to-structure alignment: complete
+  - PyMOL/ChimeraX script generation: complete
+  - Structural annotation module implementation: complete
+  - Validation: complete (`tests/test_pdb_mapper.py` 12/12, full suite 45/45)
+- **Phase 7 (Evolutionary & Physicochemical Analysis): in progress**
   - Evolutionary timeline (Age of Switches): pending
   - Structural clustering analysis: pending
   - Co-evolution network analysis: pending
   - Physicochemical trajectory analysis: pending
 
-## Pending (Before Phase 7)
-- Phase 6 implementation and structural mapping completion
-- User review/approval of Phase 6 outputs
+## Pending (Before Phase 8)
+- User review/approval of Phase 6 structural mapping outputs
+- Phase 7 implementation and validation
