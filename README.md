@@ -4,20 +4,40 @@
 This repository implements a reproducible BADASP-inspired computational pipeline focused on the IPR019888 transcription factor family. The workflow performs sequence ingestion, quality-controlled alignment/phylogeny generation, and topological subfamily clustering to support downstream specificity-determining position analysis.
 
 ## Current Status
-- Phase 1 complete: architecture and sequence ingestion are implemented and tested.
-- Phase 2 complete: length filtering, CD-HIT reduction, MAFFT alignment, trimAl trimming, and FastTree phylogeny are implemented and tested.
-- Phase 3 in progress: topological, tree-based subfamily clustering and LCA identification implemented with tests and execution outputs.
+- **Phase 1 (Architecture & Data Ingestion)**: ✓ Complete
+- **Phase 2 (Alignment & Phylogeny)**: ✓ Complete — CD-HIT, MAFFT, trimAl, FastTree
+- **Phase 3 (Topological Subfamily Clustering)**: ✓ Complete — Hierarchical tree clustering, LCA identification
+- **Phase 4 (Ancestral Sequence Reconstruction)**: ✓ Complete — IQ-TREE2 ASR for internal nodes
+- **Phase 5 (Restricted BADASP Scoring)**: ✓ Complete — Multilevel sister-clade scoring, SDP identification (33/33 tests passing)
+- **Phase 6 (Structural Mapping)**: 🔄 In Progress — TDD scaffold in place, awaiting implementation
+- **Phase 7 (Evolutionary & Physicochemical Analysis)**: ⏱️ Pending — Evolutionary timeline, structural clustering, co-evolution networks
 - All development uses TDD and the root virtual environment (`venv/`).
 
 ## Methodology Summary
-1. Fetch IPR019888 sequences from UniProt/InterPro stream.
-2. Filter sequences by expected domain length range (130-200 AA).
-3. Perform CD-HIT representative clustering for tractable MSA input.
-4. Build MSA with MAFFT and trim columns with trimAl (`-gt 0.5`).
-5. Build an ML-like phylogeny with FastTree.
-6. Convert tree topology to a hierarchical linkage representation.
-7. Cut the hierarchy into monophyletic clades by cophenetic-distance threshold.
-8. Identify clade LCAs and export cluster summary tables.
+
+### Phase 1-2: Sequence Ingestion & Alignment
+1. Fetch IPR019888 sequences from UniProt/InterPro (117k raw sequences).
+2. Filter sequences by domain length (130-200 AA; 110k retained).
+3. Perform CD-HIT representative clustering (5.9k clusters at 60% identity).
+4. Build MSA with MAFFT; trim columns with trimAl (`-gt 0.2`; 165 columns).
+5. Build ML phylogeny with FastTree.
+
+### Phase 3: Topological Subfamily Clustering
+6. Root tree at midpoint; convert to hierarchical linkage representation.
+7. Cut hierarchy into monophyletic clades by cophenetic-distance threshold (adaptive search).
+8. Retain clades ≥5 sequences (3-level hierarchy: Groups, Families, Subfamilies).
+9. Identify and extract clade Last Common Ancestors (LCAs).
+
+### Phase 4-5: Ancestral Reconstruction & Scoring
+10. Run IQ-TREE2 ASR to infer ancestral amino acid sequences at internal nodes.
+11. Compute restricted BADASP scores for nearest-sister clade pairs within hierarchy.
+12. Score formula: `RC - (AC * p(AC))` where RC=conservation, AC=ancestral call, p(AC)=posterior probability.
+13. Calculate 95th percentile threshold on raw pairwise scores; identify Specificity Determining Positions (SDPs).
+14. Generate dendrogram switch-event overlays and hierarchical score distributions.
+
+### Phase 6-7: Structural & Evolutionary Analysis (In Progress)
+15. Map trimmed alignment columns to PDB residue numbers; generate PyMOL scripts for SDP visualization.
+16. Analyze SDP evolution: phylogenetic depth timeline, 3D spatial clustering, co-evolution networks, physicochemical trajectories.
 
 ## Repository Structure
 - `src/`: pipeline modules
