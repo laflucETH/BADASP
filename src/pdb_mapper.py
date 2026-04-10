@@ -327,9 +327,6 @@ class PDBMapper:
 
         if residues:
             selector = ",".join(str(residue) for residue in residues)
-            lines.append(f"show :{selector} atoms")
-            lines.append(f"style :{selector} stick")
-
             for residue, color_hex in residue_pairs:
                 lines.append(f"color :{residue} {color_hex}")
 
