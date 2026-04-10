@@ -180,6 +180,20 @@
 - Structural script outputs:
   - ChimeraX script: `results/structural_mapping/highlight_sdps.cxc`
   - PyMOL script support implemented in module API (`generate_pymol_script`)
+- Publication-quality ChimeraX rendering profile (Figure 2-style upgrade):
+  - Combined Family + Subfamily mapping on the same structure
+  - Gradient coloring by `switch_count`:
+    - Family: warm gradient (yellow -> red)
+    - Subfamily: cool gradient (cyan -> blue)
+    - Group: optional accent gradient (light purple -> purple)
+  - Rendering directives embedded in script header:
+    - `set bgColor white`
+    - `lighting soft`
+    - `graphics silhouettes true color black width 1.5`
+    - `material dull`
+    - `show cartoon`
+    - `hide atoms`
+    - `show :<sdp_residues> atoms` and stick styling for SDP sidechains
 - Hierarchy coloring in generated scripts:
   - Groups: red
   - Families: blue

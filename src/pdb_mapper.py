@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 from Bio import SeqIO
@@ -147,6 +147,75 @@ class PDBMapper:
 
         return [int(p) for p in df["position"].head(top_n).tolist()]
 
+    def _top_switch_rows_from_csv(self, csv_path: Path, top_n: int) -> List[Tuple[int, float]]:
+        """Return top positions with switch counts (or fallback score) for gradient coloring."""
+        if not csv_path.exists():
+            return []
+
+        df = pd.read_csv(csv_path)
+        if "position" not in df.columns:
+            return []
+
+        value_col = "switch_count" if "switch_count" in df.columns else "max_score"
+        if value_col is None or value_col not in df.columns:
+            return []
+
+        if "switch_count" in df.columns and "max_score" in df.columns:
+            df = df.sort_values(["switch_count", "max_score"], ascending=[False, False])
+        else:
+            df = df.sort_values([value_col], ascending=[False])
+
+        top_df = df[["position", value_col]].head(top_n)
+        return [(int(pos), float(val)) for pos, val in top_df.itertuples(index=False, name=None)]
+
+    @staticmethod
+    def _hex_to_rgb(color_hex: str) -> Tuple[int, int, int]:
+        color = color_hex.lstrip("#")
+        return int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
+
+    @staticmethod
+    def _rgb_to_hex(rgb: Tuple[int, int, int]) -> str:
+        return f"#{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X}"
+
+    def _interpolate_hex(self, low_hex: str, high_hex: str, fraction: float) -> str:
+        low = self._hex_to_rgb(low_hex)
+        high = self._hex_to_rgb(high_hex)
+        frac = max(0.0, min(1.0, fraction))
+        rgb = (
+            int(round(low[0] + (high[0] - low[0]) * frac)),
+            int(round(low[1] + (high[1] - low[1]) * frac)),
+            int(round(low[2] + (high[2] - low[2]) * frac)),
+        )
+        return self._rgb_to_hex(rgb)
+
+    def _residue_color_pairs(
+        self,
+        top_rows: Sequence[Tuple[int, float]],
+        mapping: Dict[int, int],
+        low_hex: str,
+        high_hex: str,
+    ) -> List[Tuple[int, str]]:
+        scored_residues: Dict[int, float] = {}
+        for msa_pos, value in top_rows:
+            if msa_pos not in mapping:
+                continue
+            residue = mapping[msa_pos]
+            scored_residues[residue] = max(value, scored_residues.get(residue, float("-inf")))
+
+        if not scored_residues:
+            return []
+
+        values = list(scored_residues.values())
+        min_val = min(values)
+        max_val = max(values)
+        scale = max(max_val - min_val, 1e-9)
+
+        residue_colors: List[Tuple[int, str]] = []
+        for residue, value in sorted(scored_residues.items()):
+            fraction = (value - min_val) / scale
+            residue_colors.append((residue, self._interpolate_hex(low_hex, high_hex, fraction)))
+        return residue_colors
+
     @staticmethod
     def _format_residue_selector(residues: Sequence[int]) -> str:
         return "+".join(str(r) for r in sorted(set(residues)))
@@ -221,26 +290,75 @@ class PDBMapper:
         pdb_path = Path(self.download_pdb())
         mapping = self.map_alignment_to_structure(alignment_path)
 
-        group_msa = self._top_positions_from_csv(sdp_csv_groups, top_n=top_n)
-        family_msa = self._top_positions_from_csv(sdp_csv_families, top_n=top_n)
-        subfamily_msa = self._top_positions_from_csv(sdp_csv_subfamilies, top_n=top_n)
+        group_rows = self._top_switch_rows_from_csv(sdp_csv_groups, top_n=top_n)
+        family_rows = self._top_switch_rows_from_csv(sdp_csv_families, top_n=top_n)
+        subfamily_rows = self._top_switch_rows_from_csv(sdp_csv_subfamilies, top_n=top_n)
 
-        group_res = [mapping[p] for p in group_msa if p in mapping]
-        family_res = [mapping[p] for p in family_msa if p in mapping]
-        subfamily_res = [mapping[p] for p in subfamily_msa if p in mapping]
+        # Family and subfamily are always combined on the same structure.
+        family_pairs = self._residue_color_pairs(
+            family_rows,
+            mapping,
+            low_hex="#FDE047",  # yellow
+            high_hex="#DC2626",  # red
+        )
+        subfamily_pairs = self._residue_color_pairs(
+            subfamily_rows,
+            mapping,
+            low_hex="#67E8F9",  # cyan
+            high_hex="#1D4ED8",  # blue
+        )
+        # Optional group overlay as an accent gradient.
+        group_pairs = self._residue_color_pairs(
+            group_rows,
+            mapping,
+            low_hex="#E9D5FF",  # light purple
+            high_hex="#7E22CE",  # purple
+        )
+
+        all_highlighted = sorted(
+            set([r for r, _ in family_pairs] + [r for r, _ in subfamily_pairs] + [r for r, _ in group_pairs])
+        )
 
         lines = [
-            "# BADASP Phase 6 structural mapping",
+            "# BADASP Phase 6 publication-quality structural mapping",
             f"open {pdb_path}",
+            "set bgColor white",
+            "lighting soft",
+            "graphics silhouettes true color black width 1.5",
+            "material dull",
+            "show cartoon",
+            "hide atoms",
             "color protein white",
         ]
 
-        if group_res:
-            lines.append(f"color :{','.join(str(r) for r in sorted(set(group_res)))} red")
-        if family_res:
-            lines.append(f"color :{','.join(str(r) for r in sorted(set(family_res)))} blue")
-        if subfamily_res:
-            lines.append(f"color :{','.join(str(r) for r in sorted(set(subfamily_res)))} green")
+        if all_highlighted:
+            residue_selector = ",".join(str(r) for r in all_highlighted)
+            lines.append(f"show :{residue_selector} atoms")
+            lines.append(f"style :{residue_selector} stick")
+        else:
+            lines.append("# no mapped SDP residues to display as atoms")
+
+        lines.append("# Family SDPs warm gradient (yellow -> red) by switch_count")
+        for residue, color_hex in family_pairs:
+            lines.append(f"color :{residue} {color_hex}")
+
+        lines.append("# Subfamily SDPs cool gradient (cyan -> blue) by switch_count")
+        for residue, color_hex in subfamily_pairs:
+            lines.append(f"color :{residue} {color_hex}")
+
+        if group_pairs:
+            lines.append("# Group SDPs optional accent gradient (light purple -> purple)")
+            for residue, color_hex in group_pairs:
+                lines.append(f"color :{residue} {color_hex}")
+
+        lines.extend(
+            [
+                "# legend",
+                f"# family_residues: {','.join(str(r) for r, _ in family_pairs) if family_pairs else 'none'}",
+                f"# subfamily_residues: {','.join(str(r) for r, _ in subfamily_pairs) if subfamily_pairs else 'none'}",
+                f"# group_residues: {','.join(str(r) for r, _ in group_pairs) if group_pairs else 'none'}",
+            ]
+        )
 
         output_cxc.write_text("\n".join(lines) + "\n")
         return output_cxc
