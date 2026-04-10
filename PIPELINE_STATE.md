@@ -190,7 +190,8 @@
   - Source tables: `results/badasp_scoring/badasp_scores_{groups,families,subfamilies}.csv` filtered to `switch_count > 0`
 - Publication-quality ChimeraX rendering profile (Figure 2-style upgrade):
   - Separate per-level scripts instead of one combined file
-  - Every mapped switch position (`switch_count > 0`) is colored with a yellow -> red gradient
+  - Every mapped switch position (`switch_count > 0`) is colored with an intensity ramp from very light red to dark red
+  - Zero-switch background remains gray (`color protein gray`) so color intensity directly reflects switch magnitude
   - Direct per-residue hex color assignment only (`color :RESIDUE #HEX`) to avoid ChimeraX `key` palette parsing issues
   - Standalone high-resolution PNG colorbars generated with matplotlib for figure assembly
   - Rendering directives embedded in script header:

@@ -395,9 +395,12 @@ class PDBMapper:
         level_outputs: Dict[str, Path] = {}
         for level, (csv_path, filename) in level_specs.items():
             rows = self._all_switch_rows_from_csv(csv_path)
-            min_switch_count, max_switch_count = self._switch_count_bounds(rows)
-            low_hex = "#FDE047"
-            high_hex = "#DC2626"
+            _, max_switch_count = self._switch_count_bounds(rows)
+            # Intensity-based palette: 0 is represented by the gray base structure,
+            # and switched residues transition from very light red to dark red.
+            min_switch_count = 0
+            low_hex = "#FBE6E6"
+            high_hex = "#7A0000"
             pairs = self._residue_color_pairs(
                 rows,
                 mapping,
