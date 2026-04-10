@@ -73,6 +73,30 @@
   - Source: `src/asr_runner.py`
   - Tooling: IQ-TREE2 `-asr` with extraction of ancestral sequences for LCA nodes of valid clades
   - Output: `data/interim/ancestral_sequences.fasta`
+- Implemented TDD-first Phase 7 evolutionary analysis module:
+  - Test: `tests/test_evolutionary_analysis.py`
+  - Source: `src/evolutionary_analysis.py`
+  - Generated artifacts:
+    - `results/evolutionary_analysis/switch_timeline.svg`
+    - `results/evolutionary_analysis/sdp_distance_heatmap.svg`
+    - `results/evolutionary_analysis/coevolution_matrix.svg`
+    - `results/evolutionary_analysis/physicochemical_shifts.csv`
+  - ToolUniverse enrichment integrated with `ProtParam_calculate`
+  - Corrected ASR node-name reconciliation using `results/topological_clustering/tree_clusters_asr_mapped.csv` (`InternalNode_* -> Node*`) for non-empty major-transition annotation
+  - Validation: targeted tests passing (`3/3`) and full suite passing (`52/52`)
+- Implemented Phase 7 refinement pass (hierarchical clustering + synthesis + structural shift mapping):
+  - Added clustered heatmaps via `seaborn.clustermap` for both distance and coevolution matrices
+  - Exported matrix tables used for plots:
+    - `results/evolutionary_analysis/distance_matrix.csv`
+    - `results/evolutionary_analysis/coevolution_matrix.csv`
+  - Added synthesis scoring for Top Functional SDPs:
+    - Definition: high switch count + high coevolution support + major physicochemical shift
+    - Output: `results/evolutionary_analysis/top_functional_sdps.csv`
+  - Added ToolUniverse literature query/cross-reference logging for IPR019888 and AraC-family specificity terms
+  - Added physicochemical structural mapping script generation in `src/pdb_mapper.py`:
+    - Output: `results/structural_mapping/highlight_physicochemistry.cxc`
+    - Color rules: charge shift red, hydrophobicity shift green, size/volume shift blue, multiple shift purple
+  - Validation: updated targeted tests passing (`tests/test_evolutionary_analysis.py` 5/5, `tests/test_pdb_mapper.py` 17/17) and full suite passing (`55/55`)
 
 ## Data Metrics (Current)
 - IPR019888 raw sequence count: 117246
@@ -206,6 +230,36 @@
   - Command run: `python -m src.pdb_mapper --pdb-id 2cg4 --alignment data/interim/IPR019888_trimmed.aln --scores-dir results/badasp_scoring --output-cxc results/structural_mapping/highlight_sdps.cxc`
   - Confirmation: `Generated ChimeraX scripts: results/structural_mapping/highlight_sdps_groups.cxc, results/structural_mapping/highlight_sdps_families.cxc, results/structural_mapping/highlight_sdps_subfamilies.cxc`
 
+## Phase 7 Metrics (Evolutionary & Physicochemical Analysis)
+- Implementation: TDD-first with `src/evolutionary_analysis.py` and `tests/test_evolutionary_analysis.py`
+- Evolutionary timeline output: `results/evolutionary_analysis/switch_timeline.svg`
+- Structural clustering heatmap output (hierarchically clustered): `results/evolutionary_analysis/sdp_distance_heatmap.svg`
+- Coevolution matrix output (hierarchically clustered): `results/evolutionary_analysis/coevolution_matrix.svg`
+- Matrix CSV exports:
+  - `results/evolutionary_analysis/distance_matrix.csv`
+  - `results/evolutionary_analysis/coevolution_matrix.csv`
+- Physicochemical trajectory output: `results/evolutionary_analysis/physicochemical_shifts.csv`
+- Top functional SDP synthesis output: `results/evolutionary_analysis/top_functional_sdps.csv`
+- ToolUniverse enrichment backend: `ProtParam_calculate`
+- ToolUniverse literature queries executed:
+  - `IPR019888 active site`
+  - `IPR019888 specificity residues`
+  - `AraC family DNA-binding specificity residues`
+- Literature retrieval summary from latest run: 3 candidate hits; no direct residue-number overlap detected in snippets (manual curation still required)
+- Major transitions annotated in latest rerun: 5
+- Example top transitions from latest run:
+  - position 27: G->A (n=10)
+  - position 146: T->S (n=6)
+  - position 46: H->Y (n=3)
+- Terminal statistics from latest refined run:
+  - Mean distance between top 15 SDPs: 27.272 Å
+  - Top correlated coevolving pairs:
+    - (27, 114): 0.4211
+    - (27, 31): 0.4091
+    - (49, 128): 0.3636
+    - (49, 150): 0.3636
+    - (26, 42): 0.3333
+
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
   - Architecture scaffold: complete
@@ -238,19 +292,20 @@
   - Min_clade_size filter audit logging: complete
   - Visual gray-out of ignored clades: complete
   - All tests passing: complete (33/33)
-- **Phase 6 (Structural Mapping): complete, user review pending**
+- **Phase 6 (Structural Mapping): complete, user-approved**
   - TDD scaffold setup: complete
   - PDB downloader function: complete
   - Sequence-to-structure alignment: complete
   - PyMOL/ChimeraX script generation: complete
   - Structural annotation module implementation: complete
   - Validation: complete (`tests/test_pdb_mapper.py` 12/12, full suite 45/45)
-- **Phase 7 (Evolutionary & Physicochemical Analysis): in progress**
-  - Evolutionary timeline (Age of Switches): pending
-  - Structural clustering analysis: pending
-  - Co-evolution network analysis: pending
-  - Physicochemical trajectory analysis: pending
+- **Phase 7 (Evolutionary & Physicochemical Analysis): implemented, awaiting user review/approval**
+  - Evolutionary timeline (Age of Switches): complete
+  - Structural clustering analysis (hierarchical clustered heatmap + exported matrix): complete
+  - Co-evolution network analysis: complete
+  - Physicochemical trajectory analysis + ToolUniverse enrichment: complete
+  - Top Functional SDP synthesis and ranking export: complete
+  - Physicochemical structural mapping script generation: complete
 
 ## Pending (Before Phase 8)
-- User review/approval of Phase 6 structural mapping outputs
-- Phase 7 implementation and validation
+- User review/approval of Phase 7 outputs

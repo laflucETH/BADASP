@@ -356,6 +356,42 @@ class TestChimeraXScriptGeneration:
                 content = script_path.read_text()
                 assert "\nkey " not in content
 
+    def test_generate_physicochemical_chimerax_script(self, monkeypatch):
+        """Generate a physicochemical-shift ChimeraX script with rule-based coloring."""
+        mapper = PDBMapper(pdb_id="2cg4")
+
+        monkeypatch.setattr(mapper, "download_pdb", lambda: "data/raw/2cg4.pdb")
+        monkeypatch.setattr(mapper, "map_alignment_to_structure", lambda alignment_path: {10: 101, 20: 205, 30: 333})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            shifts_csv = tmp / "physicochemical_shifts.csv"
+            shifts_csv.write_text(
+                "\n".join(
+                    [
+                        "position,charge_change,hydrophobicity_change,volume_change",
+                        "10,neutral->positive,polar->polar,1.0",
+                        "20,neutral->neutral,polar->hydrophobic,2.0",
+                        "30,neutral->neutral,polar->polar,60.0",
+                    ]
+                )
+                + "\n"
+            )
+            output_cxc = tmp / "highlight_physicochemistry.cxc"
+
+            out = mapper.generate_physicochemical_chimerax_script(
+                alignment_path=Path("data/interim/IPR019888_trimmed.aln"),
+                physicochemical_csv=shifts_csv,
+                output_cxc=output_cxc,
+            )
+
+            assert out.exists()
+            content = out.read_text()
+            assert "color :101 #D62728" in content
+            assert "color :205 #2CA02C" in content
+            assert "color :333 #1F77B4" in content
+            assert "set bgColor white" in content
+
 
 class TestPDBMapperEndToEnd:
     """Integration tests for end-to-end structural mapping."""

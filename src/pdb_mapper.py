@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from Bio import SeqIO
 from Bio.Align import PairwiseAligner
@@ -449,6 +450,117 @@ class PDBMapper:
             output_dir=output_dir,
         )
         return outputs["families"]
+
+    def generate_physicochemical_chimerax_script(
+        self,
+        alignment_path: Path,
+        physicochemical_csv: Path,
+        output_cxc: Path,
+        volume_threshold: float = 45.0,
+    ) -> Path:
+        """Generate a ChimeraX script coloring residues by biochemical shift class."""
+        output_cxc.parent.mkdir(parents=True, exist_ok=True)
+        pdb_path = Path(self.download_pdb())
+        mapping = self.map_alignment_to_structure(alignment_path)
+
+        if not physicochemical_csv.exists():
+            output_cxc.write_text(
+                "\n".join(
+                    [
+                        "# BADASP Phase 7 physicochemical structural mapping",
+                        f"open {pdb_path.resolve()}",
+                        "set bgColor white",
+                        "lighting soft",
+                        "show cartoon",
+                        "hide atoms",
+                        "color protein gainsboro",
+                        "# no physicochemical shifts found",
+                    ]
+                )
+                + "\n"
+            )
+            return output_cxc
+
+        df = pd.read_csv(physicochemical_csv)
+
+        def _is_shift(change: str) -> bool:
+            parts = str(change).split("->")
+            return len(parts) == 2 and parts[0] != parts[1]
+
+        # Color rules:
+        # charge shift = red, hydrophobicity shift = green, size shift = blue, multiple = purple.
+        color_map = {
+            "charge_shift": "#D62728",
+            "hydrophobicity_shift": "#2CA02C",
+            "size_shift": "#1F77B4",
+            "multiple_complex": "#9467BD",
+        }
+
+        residue_color: Dict[int, str] = {}
+        for _, row in df.iterrows():
+            pos = int(row.get("position", -1))
+            if pos not in mapping:
+                continue
+            residue = int(mapping[pos])
+            charge_shift = _is_shift(str(row.get("charge_change", "")))
+            hydro_shift = _is_shift(str(row.get("hydrophobicity_change", "")))
+            volume_delta = float(row.get("volume_change", 0.0)) if pd.notna(row.get("volume_change", np.nan)) else 0.0
+            size_shift = abs(volume_delta) >= float(volume_threshold)
+            n_shifts = int(charge_shift) + int(hydro_shift) + int(size_shift)
+
+            if n_shifts >= 2:
+                category = "multiple_complex"
+            elif charge_shift:
+                category = "charge_shift"
+            elif hydro_shift:
+                category = "hydrophobicity_shift"
+            elif size_shift:
+                category = "size_shift"
+            else:
+                continue
+            residue_color[residue] = color_map[category]
+
+        lines = [
+            "# BADASP Phase 7 physicochemical structural mapping",
+            f"open {pdb_path.resolve()}",
+            "set bgColor white",
+            "lighting soft",
+            "lighting shadows false",
+            "lighting depthCue false",
+            "graphics silhouettes true color black width 4",
+            "material dull",
+            "show cartoon",
+            "hide atoms",
+            "color protein gainsboro",
+        ]
+
+        if residue_color:
+            for residue, color in sorted(residue_color.items()):
+                lines.append(f"color :{residue} {color}")
+            selector = ",".join(str(residue) for residue in sorted(residue_color))
+            lines.extend(
+                [
+                    f"show :{selector} atoms",
+                    f"style :{selector} stick",
+                    "size stickRadius 0.28",
+                    "size atomRadius 1.05",
+                ]
+            )
+        else:
+            lines.append("# no mapped physicochemical shifts passed filters")
+
+        lines.extend(
+            [
+                "# legend",
+                "# charge_shift: #D62728",
+                "# hydrophobicity_shift: #2CA02C",
+                "# size_shift: #1F77B4",
+                "# multiple_complex: #9467BD",
+            ]
+        )
+
+        output_cxc.write_text("\n".join(lines) + "\n")
+        return output_cxc
 
 
 def _resolve_sdp_csv(base_dir: Path, level: str) -> Path:
