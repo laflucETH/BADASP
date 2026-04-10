@@ -178,6 +178,13 @@ class PDBMapper:
         return []
 
     @staticmethod
+    def _switch_count_bounds(rows: Sequence[Tuple[int, float]]) -> Tuple[int, int]:
+        counts = [int(value) for _, value in rows if float(value) > 0]
+        if not counts:
+            return 0, 0
+        return min(counts), max(counts)
+
+    @staticmethod
     def _hex_to_rgb(color_hex: str) -> Tuple[int, int, int]:
         color = color_hex.lstrip("#")
         return int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
@@ -203,6 +210,8 @@ class PDBMapper:
         mapping: Dict[int, int],
         low_hex: str,
         high_hex: str,
+        min_value: Optional[float] = None,
+        max_value: Optional[float] = None,
     ) -> List[Tuple[int, str]]:
         scored_residues: Dict[int, float] = {}
         for msa_pos, value in top_rows:
@@ -214,9 +223,8 @@ class PDBMapper:
         if not scored_residues:
             return []
 
-        values = list(scored_residues.values())
-        min_val = min(values)
-        max_val = max(values)
+        min_val = float(min_value) if min_value is not None else min(scored_residues.values())
+        max_val = float(max_value) if max_value is not None else max(scored_residues.values())
         scale = max(max_val - min_val, 1e-9)
 
         residue_colors: List[Tuple[int, str]] = []
@@ -291,6 +299,10 @@ class PDBMapper:
         residue_pairs: Sequence[Tuple[int, float]],
         output_path: Path,
         level_label: str,
+        min_switch_count: int,
+        max_switch_count: int,
+        low_hex: str,
+        high_hex: str,
     ) -> Path:
         """Write a publication-quality ChimeraX script for one hierarchy level."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -316,9 +328,11 @@ class PDBMapper:
             for residue, color_hex in residue_pairs:
                 lines.append(f"color :{residue} {color_hex}")
 
+            lines.append(f"key {low_hex} {min_switch_count} {high_hex} {max_switch_count} title \"{level_label} Switches\"")
             lines.append(f"# {level_label.lower()}_residues: {selector}")
         else:
             lines.append(f"# {level_label.lower()}_residues: none")
+            lines.append(f"key {low_hex} 0 {high_hex} 0 title \"{level_label} Switches\"")
 
         output_path.write_text("\n".join(lines) + "\n")
         return output_path
@@ -344,9 +358,28 @@ class PDBMapper:
         level_outputs: Dict[str, Path] = {}
         for level, (csv_path, filename) in level_specs.items():
             rows = self._all_switch_rows_from_csv(csv_path)
-            pairs = self._residue_color_pairs(rows, mapping, low_hex="#FDE047", high_hex="#DC2626")
+            min_switch_count, max_switch_count = self._switch_count_bounds(rows)
+            low_hex = "#FDE047"
+            high_hex = "#DC2626"
+            pairs = self._residue_color_pairs(
+                rows,
+                mapping,
+                low_hex=low_hex,
+                high_hex=high_hex,
+                min_value=min_switch_count,
+                max_value=max_switch_count,
+            )
             output_path = output_dir / filename
-            self._build_chimerax_script(pdb_path, pairs, output_path, level.capitalize())
+            self._build_chimerax_script(
+                pdb_path,
+                pairs,
+                output_path,
+                level.capitalize(),
+                min_switch_count,
+                max_switch_count,
+                low_hex,
+                high_hex,
+            )
             level_outputs[level] = output_path
         return level_outputs
 

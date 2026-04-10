@@ -187,6 +187,7 @@
 - Publication-quality ChimeraX rendering profile (Figure 2-style upgrade):
   - Separate per-level scripts instead of one combined file
   - Every mapped switch position (`switch_count > 0`) is colored with a yellow -> red gradient
+  - 2D viewport legend added at the bottom of each script via ChimeraX `key` command using the level-specific integer switch_count bounds
   - Rendering directives embedded in script header:
     - `set bgColor white`
     - `lighting soft`
