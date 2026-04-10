@@ -257,9 +257,9 @@ class TestChimeraXScriptGeneration:
         """
         pdb_id = "2cg4"
         alignment_path = Path("data/interim/IPR019888_trimmed.aln")
-        sdp_csv_groups = Path("results/badasp_scoring/badasp_sdps_groups.csv")
-        sdp_csv_families = Path("results/badasp_scoring/badasp_sdps_families.csv")
-        sdp_csv_subfamilies = Path("results/badasp_scoring/badasp_sdps_subfamilies.csv")
+        sdp_csv_groups = Path("results/badasp_scoring/badasp_scores_groups.csv")
+        sdp_csv_families = Path("results/badasp_scoring/badasp_scores_families.csv")
+        sdp_csv_subfamilies = Path("results/badasp_scoring/badasp_scores_subfamilies.csv")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
@@ -289,7 +289,7 @@ class TestChimeraXScriptGeneration:
         """
         pdb_id = "2cg4"
         alignment_path = Path("data/interim/IPR019888_trimmed.aln")
-        sdp_csv_families = Path("results/badasp_scoring/badasp_sdps_families.csv")
+        sdp_csv_families = Path("results/badasp_scoring/badasp_scores_families.csv")
         mapper = PDBMapper(pdb_id=pdb_id)
         mapping = mapper.map_alignment_to_structure(alignment_path=alignment_path)
         expected_positions = sorted(
@@ -303,9 +303,9 @@ class TestChimeraXScriptGeneration:
             output_dir = Path(tmpdir)
             outputs = mapper.generate_chimerax_scripts(
                 alignment_path=alignment_path,
-                sdp_csv_groups=Path("results/badasp_scoring/badasp_sdps_groups.csv"),
+                sdp_csv_groups=Path("results/badasp_scoring/badasp_scores_groups.csv"),
                 sdp_csv_families=sdp_csv_families,
-                sdp_csv_subfamilies=Path("results/badasp_scoring/badasp_sdps_subfamilies.csv"),
+                sdp_csv_subfamilies=Path("results/badasp_scoring/badasp_scores_subfamilies.csv"),
                 output_dir=output_dir,
             )
 

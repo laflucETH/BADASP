@@ -151,11 +151,11 @@ def plot_badasp_score_distribution(
 
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     plt.figure(figsize=(10, 6))
-    sns.histplot(scores, bins=40, kde=True, stat="density", color=color, alpha=0.35)
+    sns.histplot(scores, bins=40, stat="count", color=color, alpha=0.35)
     plt.axvline(threshold, color=color, linestyle="--", linewidth=2.0, label=f"95th percentile = {threshold:.3f}")
     plt.title(title)
     plt.xlabel("Raw BADASP Score")
-    plt.ylabel("Density")
+    plt.ylabel("Count")
     plt.legend(frameon=False)
     plt.tight_layout()
     plt.savefig(output_svg, format="svg")
@@ -185,7 +185,17 @@ def plot_hierarchical_badasp_distributions(
     for label, df in score_tables.items():
         scores = df["score"].astype(float).to_numpy()
         threshold = float(np.percentile(scores, 95)) if len(scores) else 0.0
-        sns.kdeplot(scores, label=label, color=colors[label], linewidth=2.0, fill=False)
+        sns.histplot(
+            scores,
+            bins=40,
+            stat="count",
+            element="step",
+            fill=False,
+            common_bins=True,
+            color=colors[label],
+            label=label,
+            linewidth=2.0,
+        )
         plt.axvline(threshold, color=colors[label], linestyle="--", linewidth=1.5, alpha=0.8)
 
     threshold_legend = [
@@ -199,7 +209,7 @@ def plot_hierarchical_badasp_distributions(
     plt.legend(handles=density_legend + threshold_legend, loc="best", frameon=False, ncol=2)
     plt.title("Hierarchical BADASP Score Distributions")
     plt.xlabel("Raw BADASP Score")
-    plt.ylabel("Density")
+    plt.ylabel("Count")
     plt.tight_layout()
     plt.savefig(output_svg, format="svg")
     plt.close()

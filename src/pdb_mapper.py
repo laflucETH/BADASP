@@ -372,10 +372,10 @@ class PDBMapper:
 
 
 def _resolve_sdp_csv(base_dir: Path, level: str) -> Path:
-    preferred = base_dir / f"badasp_sdps_{level}.csv"
+    preferred = base_dir / f"badasp_scores_{level}.csv"
     if preferred.exists():
         return preferred
-    return base_dir / f"badasp_scores_{level}.csv"
+    return base_dir / f"badasp_sdps_{level}.csv"
 
 
 def build_parser() -> argparse.ArgumentParser:

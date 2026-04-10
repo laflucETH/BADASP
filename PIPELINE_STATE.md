@@ -155,7 +155,7 @@
 - Hierarchical comparative visualizations:
   - Score distributions: `results/badasp_scoring/hierarchical_distributions.svg`
   - Switch counts across the alignment: `results/badasp_scoring/hierarchical_switch_counts.svg`
-- Individual hierarchical score distributions:
+- Individual hierarchical score distributions (raw counts on the Y-axis):
   - `results/badasp_scoring/badasp_score_distribution_groups.svg`
   - `results/badasp_scoring/badasp_score_distribution_families.svg`
   - `results/badasp_scoring/badasp_score_distribution_subfamilies.svg`
@@ -167,7 +167,7 @@
     - Groups: 4 pairs with switches, 4 mapped scatter coordinates
     - Families: 23 pairs with switches, 21 mapped scatter coordinates
     - Subfamilies: 78 pairs with switches, 72 mapped scatter coordinates
-- Distribution source for all score-density plots: raw pairwise score tables (`raw_pairwise_*.csv`), with 95th percentile lines derived from the same raw distributions
+- Distribution source for all score-distribution plots: raw pairwise score tables (`raw_pairwise_*.csv`), with histograms rendered as absolute counts and 95th percentile lines derived from the same raw distributions
 - Test coverage: 45 tests passing in the current suite
 
 ## Phase 6 Metrics (Structural Mapping)
@@ -183,6 +183,7 @@
     - `results/structural_mapping/highlight_sdps_families.cxc`
     - `results/structural_mapping/highlight_sdps_subfamilies.cxc`
   - PyMOL script support implemented in module API (`generate_pymol_script`)
+  - Source tables: `results/badasp_scoring/badasp_scores_{groups,families,subfamilies}.csv` filtered to `switch_count > 0`
 - Publication-quality ChimeraX rendering profile (Figure 2-style upgrade):
   - Separate per-level scripts instead of one combined file
   - Every mapped switch position (`switch_count > 0`) is colored with a yellow -> red gradient
