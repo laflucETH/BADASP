@@ -316,11 +316,13 @@ class PDBMapper:
             f"open {pdb_path.resolve()}",
             "set bgColor white",
             "lighting soft",
-            "graphics silhouettes true color black width 1.5",
+            "lighting shadows false",
+            "lighting depthCue false",
+            "graphics silhouettes true color black width 4",
             "material dull",
             "show cartoon",
             "hide atoms",
-            "color protein gray",
+            "color protein gainsboro",
         ]
 
         if residues:
