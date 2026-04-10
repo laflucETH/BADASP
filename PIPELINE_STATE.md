@@ -178,14 +178,14 @@
   - Pairwise alignment engine: `Bio.Align.PairwiseAligner` (global mode)
   - Mapping output contract: `msa_column_index -> pdb_residue_number`
 - Structural script outputs:
-  - ChimeraX script: `results/structural_mapping/highlight_sdps.cxc`
+  - ChimeraX scripts:
+    - `results/structural_mapping/highlight_sdps_groups.cxc`
+    - `results/structural_mapping/highlight_sdps_families.cxc`
+    - `results/structural_mapping/highlight_sdps_subfamilies.cxc`
   - PyMOL script support implemented in module API (`generate_pymol_script`)
 - Publication-quality ChimeraX rendering profile (Figure 2-style upgrade):
-  - Combined Family + Subfamily mapping on the same structure
-  - Gradient coloring by `switch_count`:
-    - Family: warm gradient (yellow -> red)
-    - Subfamily: cool gradient (cyan -> blue)
-    - Group: optional accent gradient (light purple -> purple)
+  - Separate per-level scripts instead of one combined file
+  - Every mapped switch position (`switch_count > 0`) is colored with a yellow -> red gradient
   - Rendering directives embedded in script header:
     - `set bgColor white`
     - `lighting soft`
@@ -194,13 +194,9 @@
     - `show cartoon`
     - `hide atoms`
     - `show :<sdp_residues> atoms` and stick styling for SDP sidechains
-- Hierarchy coloring in generated scripts:
-  - Groups: red
-  - Families: blue
-  - Subfamilies: green
 - CLI execution status:
-  - Command run: `python -m src.pdb_mapper --pdb-id 2cg4 --alignment data/interim/IPR019888_trimmed.aln --scores-dir results/badasp_scoring --output-cxc results/structural_mapping/highlight_sdps.cxc --top-n 10`
-  - Confirmation: `Generated ChimeraX script: results/structural_mapping/highlight_sdps.cxc`
+  - Command run: `python -m src.pdb_mapper --pdb-id 2cg4 --alignment data/interim/IPR019888_trimmed.aln --scores-dir results/badasp_scoring --output-cxc results/structural_mapping/highlight_sdps.cxc`
+  - Confirmation: `Generated ChimeraX scripts: results/structural_mapping/highlight_sdps_groups.cxc, results/structural_mapping/highlight_sdps_families.cxc, results/structural_mapping/highlight_sdps_subfamilies.cxc`
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete

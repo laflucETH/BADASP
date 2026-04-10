@@ -10,6 +10,7 @@ Tests verify:
 import tempfile
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from src.pdb_mapper import PDBMapper
@@ -241,6 +242,76 @@ class TestPyMOLScriptGeneration:
                 content = f.read()
                 # Should have selection statements (e.g., "resi X")
                 assert len(content) > 100
+
+
+class TestChimeraXScriptGeneration:
+    """Test generation of separate ChimeraX scripts for each hierarchy level."""
+
+    def test_three_separate_chimerax_scripts(self):
+        """
+        Generate three level-specific scripts instead of one combined file.
+
+        Expected:
+        - Groups, families, and subfamilies each get a distinct .cxc file
+        - The legacy combined file is not required for the refactor
+        """
+        pdb_id = "2cg4"
+        alignment_path = Path("data/interim/IPR019888_trimmed.aln")
+        sdp_csv_groups = Path("results/badasp_scoring/badasp_sdps_groups.csv")
+        sdp_csv_families = Path("results/badasp_scoring/badasp_sdps_families.csv")
+        sdp_csv_subfamilies = Path("results/badasp_scoring/badasp_sdps_subfamilies.csv")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            mapper = PDBMapper(pdb_id=pdb_id)
+            outputs = mapper.generate_chimerax_scripts(
+                alignment_path=alignment_path,
+                sdp_csv_groups=sdp_csv_groups,
+                sdp_csv_families=sdp_csv_families,
+                sdp_csv_subfamilies=sdp_csv_subfamilies,
+                output_dir=output_dir,
+            )
+
+            assert set(outputs.keys()) == {"groups", "families", "subfamilies"}
+            assert outputs["groups"].name == "highlight_sdps_groups.cxc"
+            assert outputs["families"].name == "highlight_sdps_families.cxc"
+            assert outputs["subfamilies"].name == "highlight_sdps_subfamilies.cxc"
+            for script_path in outputs.values():
+                assert script_path.exists()
+
+    def test_chimerax_scripts_cover_all_switch_positions(self):
+        """
+        Ensure the refactored ChimeraX scripts use all mapped switch positions.
+
+        Expected:
+        - The families script contains every position with switch_count > 0 from the SDP table
+        - The script is not limited to a top-N subset
+        """
+        pdb_id = "2cg4"
+        alignment_path = Path("data/interim/IPR019888_trimmed.aln")
+        sdp_csv_families = Path("results/badasp_scoring/badasp_sdps_families.csv")
+        mapper = PDBMapper(pdb_id=pdb_id)
+        mapping = mapper.map_alignment_to_structure(alignment_path=alignment_path)
+        expected_positions = sorted(
+            int(pos)
+            for pos in pd.read_csv(sdp_csv_families).query("switch_count > 0")["position"].tolist()
+            if int(pos) in mapping
+        )
+        expected_residues = sorted(mapping[pos] for pos in expected_positions)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            outputs = mapper.generate_chimerax_scripts(
+                alignment_path=alignment_path,
+                sdp_csv_groups=Path("results/badasp_scoring/badasp_sdps_groups.csv"),
+                sdp_csv_families=sdp_csv_families,
+                sdp_csv_subfamilies=Path("results/badasp_scoring/badasp_sdps_subfamilies.csv"),
+                output_dir=output_dir,
+            )
+
+            content = outputs["families"].read_text()
+            for residue in expected_residues:
+                assert f":{residue}" in content
 
 
 class TestPDBMapperEndToEnd:

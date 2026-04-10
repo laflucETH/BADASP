@@ -132,21 +132,6 @@ class PDBMapper:
 
         return mapping
 
-    def _top_positions_from_csv(self, csv_path: Path, top_n: int) -> List[int]:
-        if not csv_path.exists():
-            return []
-
-        df = pd.read_csv(csv_path)
-        if "position" not in df.columns:
-            return []
-
-        if "switch_count" in df.columns and "max_score" in df.columns:
-            df = df.sort_values(["switch_count", "max_score"], ascending=[False, False])
-        elif "switch_count" in df.columns:
-            df = df.sort_values(["switch_count"], ascending=[False])
-
-        return [int(p) for p in df["position"].head(top_n).tolist()]
-
     def _top_switch_rows_from_csv(self, csv_path: Path, top_n: int) -> List[Tuple[int, float]]:
         """Return top positions with switch counts (or fallback score) for gradient coloring."""
         if not csv_path.exists():
@@ -167,6 +152,30 @@ class PDBMapper:
 
         top_df = df[["position", value_col]].head(top_n)
         return [(int(pos), float(val)) for pos, val in top_df.itertuples(index=False, name=None)]
+
+    def _all_switch_rows_from_csv(self, csv_path: Path) -> List[Tuple[int, float]]:
+        """Return every mapped switch position with switch_count > 0 for a level."""
+        if not csv_path.exists():
+            return []
+
+        df = pd.read_csv(csv_path)
+        if "position" not in df.columns:
+            return []
+
+        if "switch_count" in df.columns:
+            df = df[df["switch_count"] > 0].copy()
+            if "max_score" in df.columns:
+                df = df.sort_values(["switch_count", "max_score"], ascending=[False, False])
+            else:
+                df = df.sort_values(["switch_count"], ascending=[False])
+            return [(int(pos), float(val)) for pos, val in df[["position", "switch_count"]].itertuples(index=False, name=None)]
+
+        if "max_score" in df.columns:
+            df = df[df["max_score"].notna()].copy()
+            df = df.sort_values(["max_score"], ascending=[False])
+            return [(int(pos), float(val)) for pos, val in df[["position", "max_score"]].itertuples(index=False, name=None)]
+
+        return []
 
     @staticmethod
     def _hex_to_rgb(color_hex: str) -> Tuple[int, int, int]:
@@ -234,9 +243,9 @@ class PDBMapper:
         pdb_path = Path(self.download_pdb())
         mapping = self.map_alignment_to_structure(alignment_path)
 
-        group_msa = self._top_positions_from_csv(sdp_csv_groups, top_n=top_n)
-        family_msa = self._top_positions_from_csv(sdp_csv_families, top_n=top_n)
-        subfamily_msa = self._top_positions_from_csv(sdp_csv_subfamilies, top_n=top_n)
+        group_msa = [pos for pos, _ in self._top_switch_rows_from_csv(sdp_csv_groups, top_n=top_n)]
+        family_msa = [pos for pos, _ in self._top_switch_rows_from_csv(sdp_csv_families, top_n=top_n)]
+        subfamily_msa = [pos for pos, _ in self._top_switch_rows_from_csv(sdp_csv_subfamilies, top_n=top_n)]
 
         group_res = [mapping[p] for p in group_msa if p in mapping]
         family_res = [mapping[p] for p in family_msa if p in mapping]
@@ -276,6 +285,71 @@ class PDBMapper:
         output_pml.write_text("\n".join(lines) + "\n")
         return output_pml
 
+    def _build_chimerax_script(
+        self,
+        pdb_path: Path,
+        residue_pairs: Sequence[Tuple[int, float]],
+        output_path: Path,
+        level_label: str,
+    ) -> Path:
+        """Write a publication-quality ChimeraX script for one hierarchy level."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        residues = [residue for residue, _ in residue_pairs]
+
+        lines = [
+            f"# BADASP Phase 6 structural mapping: {level_label}",
+            f"open {pdb_path.resolve()}",
+            "set bgColor white",
+            "lighting soft",
+            "graphics silhouettes true color black width 1.5",
+            "material dull",
+            "show cartoon",
+            "hide atoms",
+            "color protein gray",
+        ]
+
+        if residues:
+            selector = ",".join(str(residue) for residue in residues)
+            lines.append(f"show :{selector} atoms")
+            lines.append(f"style :{selector} stick")
+
+            for residue, color_hex in residue_pairs:
+                lines.append(f"color :{residue} {color_hex}")
+
+            lines.append(f"# {level_label.lower()}_residues: {selector}")
+        else:
+            lines.append(f"# {level_label.lower()}_residues: none")
+
+        output_path.write_text("\n".join(lines) + "\n")
+        return output_path
+
+    def generate_chimerax_scripts(
+        self,
+        alignment_path: Path,
+        sdp_csv_groups: Path,
+        sdp_csv_families: Path,
+        sdp_csv_subfamilies: Path,
+        output_dir: Path,
+    ) -> Dict[str, Path]:
+        """Generate separate ChimeraX scripts for groups, families, and subfamilies."""
+        output_dir.mkdir(parents=True, exist_ok=True)
+        pdb_path = Path(self.download_pdb())
+        mapping = self.map_alignment_to_structure(alignment_path)
+
+        level_specs = {
+            "groups": (sdp_csv_groups, "highlight_sdps_groups.cxc"),
+            "families": (sdp_csv_families, "highlight_sdps_families.cxc"),
+            "subfamilies": (sdp_csv_subfamilies, "highlight_sdps_subfamilies.cxc"),
+        }
+        level_outputs: Dict[str, Path] = {}
+        for level, (csv_path, filename) in level_specs.items():
+            rows = self._all_switch_rows_from_csv(csv_path)
+            pairs = self._residue_color_pairs(rows, mapping, low_hex="#FDE047", high_hex="#DC2626")
+            output_path = output_dir / filename
+            self._build_chimerax_script(pdb_path, pairs, output_path, level.capitalize())
+            level_outputs[level] = output_path
+        return level_outputs
+
     def generate_chimerax_script(
         self,
         alignment_path: Path,
@@ -285,83 +359,16 @@ class PDBMapper:
         output_cxc: Path,
         top_n: int = 10,
     ) -> Path:
-        """Generate a ChimeraX command script for mapped SDP highlighting."""
-        output_cxc.parent.mkdir(parents=True, exist_ok=True)
-        pdb_path = Path(self.download_pdb())
-        mapping = self.map_alignment_to_structure(alignment_path)
-
-        group_rows = self._top_switch_rows_from_csv(sdp_csv_groups, top_n=top_n)
-        family_rows = self._top_switch_rows_from_csv(sdp_csv_families, top_n=top_n)
-        subfamily_rows = self._top_switch_rows_from_csv(sdp_csv_subfamilies, top_n=top_n)
-
-        # Family and subfamily are always combined on the same structure.
-        family_pairs = self._residue_color_pairs(
-            family_rows,
-            mapping,
-            low_hex="#FDE047",  # yellow
-            high_hex="#DC2626",  # red
+        """Backward-compatible wrapper that writes the family-level script path."""
+        output_dir = output_cxc.parent
+        outputs = self.generate_chimerax_scripts(
+            alignment_path=alignment_path,
+            sdp_csv_groups=sdp_csv_groups,
+            sdp_csv_families=sdp_csv_families,
+            sdp_csv_subfamilies=sdp_csv_subfamilies,
+            output_dir=output_dir,
         )
-        subfamily_pairs = self._residue_color_pairs(
-            subfamily_rows,
-            mapping,
-            low_hex="#67E8F9",  # cyan
-            high_hex="#1D4ED8",  # blue
-        )
-        # Optional group overlay as an accent gradient.
-        group_pairs = self._residue_color_pairs(
-            group_rows,
-            mapping,
-            low_hex="#E9D5FF",  # light purple
-            high_hex="#7E22CE",  # purple
-        )
-
-        all_highlighted = sorted(
-            set([r for r, _ in family_pairs] + [r for r, _ in subfamily_pairs] + [r for r, _ in group_pairs])
-        )
-
-        lines = [
-            "# BADASP Phase 6 publication-quality structural mapping",
-            f"open {pdb_path}",
-            "set bgColor white",
-            "lighting soft",
-            "graphics silhouettes true color black width 1.5",
-            "material dull",
-            "show cartoon",
-            "hide atoms",
-            "color protein white",
-        ]
-
-        if all_highlighted:
-            residue_selector = ",".join(str(r) for r in all_highlighted)
-            lines.append(f"show :{residue_selector} atoms")
-            lines.append(f"style :{residue_selector} stick")
-        else:
-            lines.append("# no mapped SDP residues to display as atoms")
-
-        lines.append("# Family SDPs warm gradient (yellow -> red) by switch_count")
-        for residue, color_hex in family_pairs:
-            lines.append(f"color :{residue} {color_hex}")
-
-        lines.append("# Subfamily SDPs cool gradient (cyan -> blue) by switch_count")
-        for residue, color_hex in subfamily_pairs:
-            lines.append(f"color :{residue} {color_hex}")
-
-        if group_pairs:
-            lines.append("# Group SDPs optional accent gradient (light purple -> purple)")
-            for residue, color_hex in group_pairs:
-                lines.append(f"color :{residue} {color_hex}")
-
-        lines.extend(
-            [
-                "# legend",
-                f"# family_residues: {','.join(str(r) for r, _ in family_pairs) if family_pairs else 'none'}",
-                f"# subfamily_residues: {','.join(str(r) for r, _ in subfamily_pairs) if subfamily_pairs else 'none'}",
-                f"# group_residues: {','.join(str(r) for r, _ in group_pairs) if group_pairs else 'none'}",
-            ]
-        )
-
-        output_cxc.write_text("\n".join(lines) + "\n")
-        return output_cxc
+        return outputs["families"]
 
 
 def _resolve_sdp_csv(base_dir: Path, level: str) -> Path:
@@ -405,15 +412,20 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     families_csv = _resolve_sdp_csv(scores_dir, "families")
     subfamilies_csv = _resolve_sdp_csv(scores_dir, "subfamilies")
 
-    output_cxc = mapper.generate_chimerax_script(
+    outputs = mapper.generate_chimerax_scripts(
         alignment_path=alignment,
         sdp_csv_groups=groups_csv,
         sdp_csv_families=families_csv,
         sdp_csv_subfamilies=subfamilies_csv,
-        output_cxc=Path(args.output_cxc),
-        top_n=args.top_n,
+        output_dir=Path(args.output_cxc).parent,
     )
-    print(f"Generated ChimeraX script: {output_cxc}")
+    combined = Path(args.output_cxc)
+    if combined.exists():
+        combined.unlink()
+    print(
+        "Generated ChimeraX scripts: "
+        + ", ".join(str(path) for path in (outputs["groups"], outputs["families"], outputs["subfamilies"]))
+    )
 
 
 if __name__ == "__main__":
