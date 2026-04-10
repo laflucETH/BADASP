@@ -1,0 +1,6 @@
+{
+  "HTH_Scaffold": [6, 34],
+  "Recognition_Helix": [35, 50],
+  "HTH_Linker": [51, 67],
+  "RAM_domain": [68, 152]
+}

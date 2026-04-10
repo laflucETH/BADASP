@@ -72,3 +72,8 @@
 - **Structural Clustering**: Calculate 3D distances between top SDPs to prove if they form a spatial cluster (e.g., an active site pocket) compared to random residues.
 - **Co-evolution Networks**: Calculate the correlation between switch positions across the phylogeny and plot a co-evolution network graph.
 - **Physicochemical Trajectories**: Analyze the specific amino acid changes at the top SDPs to quantify massive biochemical shifts (Charge, Volume, Hydrophobicity transitions).
+
+### Phase 7b: Advanced Structural & Taxonomic Synthesis
+- Architectural Domain Mapping must be executed across all three hierarchy levels (Groups, Families, Subfamilies).
+- Co-evolution Network Community Extraction must be performed from coevolution matrices and exported as residue-to-community assignments.
+- Taxonomic/Species Distribution analysis must map top SDPs to major taxa and export clade-level distributions.

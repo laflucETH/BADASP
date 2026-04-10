@@ -4,10 +4,13 @@ import numpy as np
 import pandas as pd
 
 from src.evolutionary_analysis import (
+    assign_coevolution_communities,
     calculate_ca_distance_matrix,
     calculate_lca_depth,
+    count_switches_per_domain,
     compute_coevolution_matrix,
     classify_physicochemical_shift,
+    extract_taxon_label,
     rank_top_functional_sdps,
 )
 
@@ -104,3 +107,39 @@ def test_rank_top_functional_sdps_synthesizes_components() -> None:
     assert ranked.iloc[0]["position"] == 10
     assert ranked.iloc[0]["shift_type"] == "multiple_complex"
     assert ranked.iloc[0]["functional_sdp_score"] >= ranked.iloc[1]["functional_sdp_score"]
+
+
+def test_count_switches_per_domain() -> None:
+    events = pd.DataFrame({"position": [5, 20, 22, 200, 240, 241]})
+    domains = {
+        "RAM_domain": [1, 170],
+        "DNA_binding_domain": [171, 280],
+        "Recognition_helix": [230, 245],
+    }
+    counts = count_switches_per_domain(events, domains)
+
+    assert counts["RAM_domain"] == 3
+    assert counts["DNA_binding_domain"] == 3
+    assert counts["Recognition_helix"] == 2
+
+
+def test_assign_coevolution_communities() -> None:
+    matrix = pd.DataFrame(
+        [
+            [1.0, 0.85, 0.05, 0.01],
+            [0.85, 1.0, 0.04, 0.02],
+            [0.05, 0.04, 1.0, 0.8],
+            [0.01, 0.02, 0.8, 1.0],
+        ],
+        index=[10, 11, 50, 51],
+        columns=[10, 11, 50, 51],
+    )
+
+    communities = assign_coevolution_communities(matrix, distance_cut=0.4)
+    assert set(communities["position"].astype(int)) == {10, 11, 50, 51}
+    assert communities["community_id"].nunique() == 2
+
+
+def test_extract_taxon_label() -> None:
+    header = "sp|Q9XYZ1|ARAC_ECOLI AraC transcriptional regulator OS=Escherichia coli OX=562"
+    assert extract_taxon_label(header) == "Escherichia coli"

@@ -97,6 +97,26 @@
     - Output: `results/structural_mapping/highlight_physicochemistry.cxc`
     - Color rules: charge shift red, hydrophobicity shift green, size/volume shift blue, multiple shift purple
   - Validation: updated targeted tests passing (`tests/test_evolutionary_analysis.py` 5/5, `tests/test_pdb_mapper.py` 17/17) and full suite passing (`55/55`)
+- Implemented Phase 7b advanced synthesis (multilevel structural + taxonomic analyses):
+  - Added architecture config source: `data/domain_architecture.json`
+  - Updated repository guidance with explicit Phase 7b requirements in `.github/copilot-instructions.md`
+  - Refactored `src/evolutionary_analysis.py` to iterate Groups/Families/Subfamilies for distance matrices, coevolution matrices, physicochemical shifts, and top functional SDP exports
+  - Added architectural domain mapping plots:
+    - `results/evolutionary_analysis/architectural_distribution_groups.svg`
+    - `results/evolutionary_analysis/architectural_distribution_families.svg`
+    - `results/evolutionary_analysis/architectural_distribution_subfamilies.svg`
+  - Added community extraction export:
+    - `results/evolutionary_analysis/coevolution_communities.csv`
+  - Added taxonomic mapping export:
+    - `results/evolutionary_analysis/taxonomic_sdp_distribution.csv`
+  - Added per-level artifacts:
+    - `distance_matrix_{groups,families,subfamilies}.csv`
+    - `coevolution_matrix_{groups,families,subfamilies}.csv`
+    - `physicochemical_shifts_{groups,families,subfamilies}.csv`
+    - `top_functional_sdps_{groups,families,subfamilies}.csv`
+    - `sdp_distance_heatmap_{groups,families,subfamilies}.svg`
+    - `coevolution_matrix_{groups,families,subfamilies}.svg`
+  - Validation: updated targeted tests passing (`tests/test_evolutionary_analysis.py` 8/8) and full suite passing (`58/58`)
 
 ## Data Metrics (Current)
 - IPR019888 raw sequence count: 117246
@@ -245,7 +265,7 @@
   - `IPR019888 active site`
   - `IPR019888 specificity residues`
   - `AraC family DNA-binding specificity residues`
-- Literature retrieval summary from latest run: 3 candidate hits; no direct residue-number overlap detected in snippets (manual curation still required)
+- Literature retrieval summary from latest run: 3 candidate hits; one tentative residue-number overlap detected (residue 66 mention, requires manual biological curation)
 - Major transitions annotated in latest rerun: 5
 - Example top transitions from latest run:
   - position 27: G->A (n=10)
@@ -259,6 +279,26 @@
     - (49, 128): 0.3636
     - (49, 150): 0.3636
     - (26, 42): 0.3333
+
+## Phase 7b Metrics (Advanced Structural & Taxonomic Synthesis)
+- Phase 7a checkpoint commit created:
+  - `Complete Phase 7a: Base evolutionary and physicochemical pipelines`
+- Corrected domain architecture source-of-truth:
+  - UniProt accession: `P0ACI6` (2cg4-linked AsnC protein)
+  - Chain: `1-152`
+  - HTH scaffold: `6-34`
+  - Recognition helix: `35-50`
+  - HTH linker: `51-67`
+  - RAM domain: `68-152`
+- Multilevel terminal statistics from latest Phase 7b run:
+  - Groups mean top-SDP distance: 29.938 Å
+  - Families mean top-SDP distance: 26.478 Å
+  - Subfamilies mean top-SDP distance: 27.272 Å
+- Coevolution communities export:
+  - `results/evolutionary_analysis/coevolution_communities.csv`
+- Taxonomic distribution export:
+  - `results/evolutionary_analysis/taxonomic_sdp_distribution.csv`
+- ToolUniverse literature query run (latest): 9 candidate hits retrieved for IPR019888/AraC specificity queries
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete
@@ -299,13 +339,13 @@
   - PyMOL/ChimeraX script generation: complete
   - Structural annotation module implementation: complete
   - Validation: complete (`tests/test_pdb_mapper.py` 12/12, full suite 45/45)
-- **Phase 7 (Evolutionary & Physicochemical Analysis): implemented, awaiting user review/approval**
-  - Evolutionary timeline (Age of Switches): complete
-  - Structural clustering analysis (hierarchical clustered heatmap + exported matrix): complete
-  - Co-evolution network analysis: complete
-  - Physicochemical trajectory analysis + ToolUniverse enrichment: complete
-  - Top Functional SDP synthesis and ranking export: complete
-  - Physicochemical structural mapping script generation: complete
+- **Phase 7 (Evolutionary & Physicochemical Analysis): complete, user-approved**
+  - Phase 7a baseline pipelines: complete and committed
+  - Multi-level refactor for Groups/Families/Subfamilies iterative outputs: complete
+  - Architectural domain mapping synthesis: complete
+  - Co-evolution community extraction: complete
+  - Taxonomic/species SDP distribution synthesis: complete
+  - Current state: pipeline concluded successfully
 
 ## Pending (Before Phase 8)
-- User review/approval of Phase 7 outputs
+- None
