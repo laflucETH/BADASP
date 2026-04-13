@@ -44,10 +44,8 @@ results_clustered/**
 
 # Track Phase 3 and Phase 5 outputs
 !results/topological_clustering/*.csv
-!results/topological_clustering/*.svg
 !results/topological_clustering/*.tree
 !results/badasp_scoring/*.csv
-!results/badasp_scoring/*.svg
 
 # Exploratory and test scripts (not part of production pipeline)
 src/data_fetcher.py
