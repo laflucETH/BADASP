@@ -301,21 +301,149 @@ def _plot_switch_timeline(events_df: pd.DataFrame, output_svg: Path) -> None:
     plt.close()
 
 
-def _plot_architecture_distribution(counts: Dict[str, int], output_svg: Path, level: str) -> None:
+def _plot_master_dendrogram(
+    tree_path: Path,
+    events_by_level: Dict[str, pd.DataFrame],
+    output_svg: Path,
+) -> None:
+    """Draw one tree-depth dendrogram with switch events from all hierarchy levels overlaid at LCA nodes."""
+    tree = Phylo.read(str(tree_path), "newick")
+    _ensure_node_names(tree)
+
+    depths = tree.depths()
+    if not max(depths.values()):
+        depths = tree.depths(unit_branch_lengths=True)
+
+    terminals = tree.get_terminals()
+    x_pos: Dict[object, float] = {term: float(i) for i, term in enumerate(terminals, start=1)}
+
+    def _assign_x(clade) -> float:
+        if clade in x_pos:
+            return x_pos[clade]
+        child_xs = [_assign_x(child) for child in clade.clades]
+        x_pos[clade] = (min(child_xs) + max(child_xs)) / 2.0 if child_xs else 0.0
+        return x_pos[clade]
+
+    _assign_x(tree.root)
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    def _draw(node) -> None:
+        x = float(x_pos[node])
+        y = float(depths[node])
+        for child in node.clades:
+            child_x = float(x_pos[child])
+            child_y = float(depths[child])
+            ax.plot([x, child_x], [y, y], color="#B0B0B0", linewidth=0.8, zorder=1)
+            ax.plot([child_x, child_x], [y, child_y], color="#B0B0B0", linewidth=0.8, zorder=1)
+            _draw(child)
+
+    _draw(tree.root)
+
+    level_colors = {
+        "groups": "#1F77B4",
+        "families": "#D95F02",
+        "subfamilies": "#2CA02C",
+    }
+    level_labels = {
+        "groups": "Groups",
+        "families": "Families",
+        "subfamilies": "Subfamilies",
+    }
+
+    node_by_name = {str(clade.name): clade for clade in tree.find_clades() if clade.name}
+    all_switch_counts: List[float] = []
+    grouped_by_level: Dict[str, pd.DataFrame] = {}
+
+    for level, events_df in events_by_level.items():
+        if events_df.empty:
+            continue
+        if "switch_count" in events_df.columns:
+            grouped = (
+                events_df.groupby("branch_id")
+                .agg(switch_count=("switch_count", "sum"))
+                .reset_index()
+            )
+        else:
+            grouped = (
+                events_df.groupby("branch_id")
+                .agg(switch_count=("position", "size"), mean_score=("score", "mean"))
+                .reset_index()
+            )
+        grouped_by_level[level] = grouped
+        all_switch_counts.extend(grouped["switch_count"].astype(float).tolist())
+
+    max_switch = max(all_switch_counts) if all_switch_counts else 1.0
+
+    for level, grouped in grouped_by_level.items():
+        x_vals: List[float] = []
+        y_vals: List[float] = []
+        sizes: List[float] = []
+
+        for _, row in grouped.iterrows():
+            branch_id = str(row["branch_id"])
+            if branch_id not in node_by_name:
+                continue
+            clade = node_by_name[branch_id]
+            x_vals.append(float(x_pos[clade]))
+            y_vals.append(float(depths[clade]))
+            sizes.append(40.0 + 260.0 * (float(row["switch_count"]) / float(max_switch)))
+
+        if not x_vals:
+            continue
+
+        ax.scatter(
+            x_vals,
+            y_vals,
+            s=sizes,
+            c=level_colors.get(level, "#444444"),
+            alpha=0.85,
+            linewidths=0.4,
+            edgecolors="black",
+            label=level_labels.get(level, level),
+            zorder=3,
+        )
+
+    ax.set_xlabel("Taxa / internal nodes")
+    ax.set_ylabel("Branch length from root")
+    ax.set_xticks([])
+    ax.invert_yaxis()
+    ax.set_title("Master Dendrogram with Multi-level BADASP Switch Events")
+    ax.legend(title="Hierarchy Level", loc="upper left")
+    fig.tight_layout()
+    output_svg.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_svg, format="svg")
+    plt.close(fig)
+
+
+def _domain_residue_width(domain_arch: Dict[str, Sequence[int]], domain: str) -> int:
+    start, end = [int(x) for x in domain_arch[domain]]
+    return max(1, (end - start) + 1)
+
+
+def _plot_architecture_distribution(
+    counts: Dict[str, int],
+    domain_arch: Dict[str, Sequence[int]],
+    output_svg: Path,
+    level: str,
+    normalize: bool = False,
+) -> None:
     rows: List[dict] = []
     for domain, count in counts.items():
-        width = 1
-        density = count / width
-        if isinstance(count, (int, float)):
-            density = float(count)
-        rows.append({"domain": domain, "switch_count": int(count), "switch_density": density})
+        width = _domain_residue_width(domain_arch, domain) if domain in domain_arch else 1
+        density = float(count) / float(width)
+        rows.append({"domain": domain, "switch_count": int(count), "switch_density": density, "domain_width": int(width)})
 
     df = pd.DataFrame(rows)
+    y_col = "switch_density" if normalize else "switch_count"
+    y_label = "Switches per residue" if normalize else "Switch Count"
+    suffix = " (Normalized)" if normalize else ""
+
     plt.figure(figsize=(10, 5))
-    sns.barplot(data=df, x="domain", y="switch_count", color="#4C78A8")
-    plt.ylabel("Switch Count")
+    sns.barplot(data=df, x="domain", y=y_col, color="#4C78A8")
+    plt.ylabel(y_label)
     plt.xlabel("Domain")
-    plt.title(f"Architectural Switch Distribution ({level.capitalize()})")
+    plt.title(f"Architectural Switch Distribution ({level.capitalize()}){suffix}")
     plt.xticks(rotation=20, ha="right")
     plt.tight_layout()
     plt.savefig(output_svg, format="svg")
@@ -687,12 +815,17 @@ def run_phase7_analyses(
     timeline_svg = output_dir / "switch_timeline.svg"
     all_events = pd.concat([events_by_level[level] for level in LEVELS], ignore_index=True)
     _plot_switch_timeline(all_events, timeline_svg)
+    master_dendrogram_svg = output_dir / "master_dendrogram_switches.svg"
+    _plot_master_dendrogram(tree_path=tree_path, events_by_level=events_by_level, output_svg=master_dendrogram_svg)
 
     community_rows: List[pd.DataFrame] = []
     tax_rows: List[pd.DataFrame] = []
     all_shifts: List[pd.DataFrame] = []
     top_positions_for_lit: Dict[str, List[int]] = {}
-    outputs: Dict[str, Path] = {"switch_timeline_svg": timeline_svg}
+    outputs: Dict[str, Path] = {
+        "switch_timeline_svg": timeline_svg,
+        "master_dendrogram_switches_svg": master_dendrogram_svg,
+    }
 
     for level in LEVELS:
         level_scores = score_by_level[level]
@@ -778,8 +911,11 @@ def run_phase7_analyses(
 
         domain_counts = count_switches_per_domain(level_events, domain_architecture)
         arch_svg = output_dir / f"architectural_distribution_{level}.svg"
-        _plot_architecture_distribution(domain_counts, arch_svg, level)
+        _plot_architecture_distribution(domain_counts, domain_architecture, arch_svg, level, normalize=False)
         outputs[f"architectural_distribution_svg_{level}"] = arch_svg
+        arch_norm_svg = output_dir / f"architectural_distribution_{level}_normalized.svg"
+        _plot_architecture_distribution(domain_counts, domain_architecture, arch_norm_svg, level, normalize=True)
+        outputs[f"architectural_distribution_svg_normalized_{level}"] = arch_norm_svg
 
         communities = assign_coevolution_communities(coevo_matrix, distance_cut=0.6)
         communities["level"] = level

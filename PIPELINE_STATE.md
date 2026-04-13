@@ -117,6 +117,51 @@
     - `sdp_distance_heatmap_{groups,families,subfamilies}.svg`
     - `coevolution_matrix_{groups,families,subfamilies}.svg`
   - Validation: updated targeted tests passing (`tests/test_evolutionary_analysis.py` 8/8) and full suite passing (`58/58`)
+- Dendrogram coordinate-system standardization pass (targeted rerun only):
+  - Refactored dendrogram rendering paths to use Biopython tree branch-depth coordinates (`tree.depths()`) instead of SciPy linkage/cophenetic axes.
+  - Updated modules: `src/visualization.py`, `src/tree_cluster.py`, and `src/evolutionary_analysis.py`.
+  - Regenerated only dendrogram artifacts:
+    - `results/topological_clustering/tree_dendrogram.svg`
+    - `results/topological_clustering/tree_dendrogram_groups.svg`
+    - `results/topological_clustering/tree_dendrogram_families.svg`
+    - `results/topological_clustering/tree_dendrogram_subfamilies.svg`
+    - `results/badasp_scoring/dendrogram_switches_groups.svg`
+    - `results/badasp_scoring/dendrogram_switches_families.svg`
+    - `results/badasp_scoring/dendrogram_switches_subfamilies.svg`
+    - `results/evolutionary_analysis/master_dendrogram_switches.svg`
+  - Validation: targeted plotting tests passing (`2/2`) and all regenerated dendrogram SVGs now label the x-axis as `Branch length from root`.
+- Dendrogram rotation + full coloring refinement:
+  - Rotated all dendrograms by 90 degrees so branch length runs vertically and taxa/leaves run horizontally.
+  - Restored hierarchy-level branch coloring for the full tree, switch, and master dendrogram outputs.
+  - Added leaf coloring from `group_id`, `family_id`, and `subfamily_id` assignments so the branch colors propagate from each split through the colored subtrees.
+  - Regenerated only dendrogram SVG artifacts again after the coloring refinement.
+  - Validation: focused visualization/evolutionary tests passing (`3/3`) and artifact grep checks confirm level-specific stroke colors in the regenerated SVGs.
+- Dendrogram style cleanup pass:
+  - Removed endpoint markers entirely to reduce clutter.
+  - Restricted non-matching / mixed branches to grey so only homogeneous group subtrees are colorized.
+  - Increased plot heights to add vertical space for the rotated master-aligned layout.
+  - Aligned the topological and switch dendrogram orientation with the master dendrogram layout.
+  - Re-generated non-switch dendrograms after orientation update so grouped/topological SVGs match the master direction.
+  - Grouping-only dendrogram outputs are retained in:
+    - `results/topological_clustering/tree_dendrogram_groups.svg`
+    - `results/topological_clustering/tree_dendrogram_families.svg`
+    - `results/topological_clustering/tree_dendrogram_subfamilies.svg`
+- Architectural distribution normalization pass:
+  - Added residue-length normalization option for architectural switch plots (`switches per residue`).
+  - Re-generated raw and normalized per-level outputs:
+    - `results/evolutionary_analysis/architectural_distribution_groups.svg`
+    - `results/evolutionary_analysis/architectural_distribution_families.svg`
+    - `results/evolutionary_analysis/architectural_distribution_subfamilies.svg`
+    - `results/evolutionary_analysis/architectural_distribution_groups_normalized.svg`
+    - `results/evolutionary_analysis/architectural_distribution_families_normalized.svg`
+    - `results/evolutionary_analysis/architectural_distribution_subfamilies_normalized.svg`
+  - Implementation details:
+    - Added `_domain_residue_width()` helper to compute per-domain residue span from `data/domain_architecture.json`
+    - Updated `_plot_architecture_distribution()` signature to include `normalize: bool` parameter
+    - Normalized plots scale switch counts by domain residue width: `density = count / width`
+    - Both raw (absolute count) and normalized (per-residue) variants available for each hierarchy level
+  - Tests verified (`test_evolutionary_analysis.py` and `test_visualization.py`): 60/60 passing
+  - Validation: grep confirmed "Switches per residue" y-axis label and "(Normalized)" in title for all normalized SVGs
 
 ## Data Metrics (Current)
 - IPR019888 raw sequence count: 117246
@@ -298,6 +343,8 @@
   - `results/evolutionary_analysis/coevolution_communities.csv`
 - Taxonomic distribution export:
   - `results/evolutionary_analysis/taxonomic_sdp_distribution.csv`
+- Master dendrogram overlay export:
+  - `results/evolutionary_analysis/master_dendrogram_switches.svg`
 - ToolUniverse literature query run (latest): 9 candidate hits retrieved for IPR019888/AraC specificity queries
 
 ## Phase Status

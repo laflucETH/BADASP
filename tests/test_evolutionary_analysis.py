@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from src.evolutionary_analysis import (
+    _plot_master_dendrogram,
     assign_coevolution_communities,
     calculate_ca_distance_matrix,
     calculate_lca_depth,
@@ -143,3 +144,20 @@ def test_assign_coevolution_communities() -> None:
 def test_extract_taxon_label() -> None:
     header = "sp|Q9XYZ1|ARAC_ECOLI AraC transcriptional regulator OS=Escherichia coli OX=562"
     assert extract_taxon_label(header) == "Escherichia coli"
+
+
+def test_plot_master_dendrogram_exports_svg(tmp_path: Path) -> None:
+    tree_path = tmp_path / "toy.tree"
+    tree_path.write_text("((A:0.1,B:0.1)N1:0.3,(C:0.1,D:0.1)N2:0.3)Root;\n")
+
+    events_by_level = {
+        "groups": pd.DataFrame({"branch_id": ["N1"], "position": [10], "score": [1.2]}),
+        "families": pd.DataFrame({"branch_id": ["N2", "N2"], "position": [20, 21], "score": [1.0, 1.1]}),
+        "subfamilies": pd.DataFrame({"branch_id": ["N1"], "position": [30], "score": [1.3]}),
+    }
+
+    output_svg = tmp_path / "master.svg"
+    _plot_master_dendrogram(tree_path=tree_path, events_by_level=events_by_level, output_svg=output_svg)
+
+    assert output_svg.exists()
+    assert output_svg.stat().st_size > 0

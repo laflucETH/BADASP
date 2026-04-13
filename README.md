@@ -8,10 +8,12 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 - **Phase 2 (Alignment & Phylogeny)**: ✓ Complete — CD-HIT, MAFFT, trimAl, FastTree
 - **Phase 3 (Topological Subfamily Clustering)**: ✓ Complete — Hierarchical tree clustering, LCA identification
 - **Phase 4 (Ancestral Sequence Reconstruction)**: ✓ Complete — IQ-TREE2 ASR for internal nodes
-- **Phase 5 (Restricted BADASP Scoring)**: ✓ Complete — Multilevel sister-clade scoring, SDP identification (33/33 tests passing)
-- **Phase 6 (Structural Mapping)**: 🔄 In Progress — TDD scaffold in place, awaiting implementation
-- **Phase 7 (Evolutionary & Physicochemical Analysis)**: ⏱️ Pending — Evolutionary timeline, structural clustering, co-evolution networks
-- All development uses TDD and the root virtual environment (`venv/`).
+- **Phase 5 (Restricted BADASP Scoring)**: ✓ Complete — Multilevel sister-clade scoring, SDP identification (45/45 tests passing)
+- **Phase 6 (Structural Mapping)**: ✓ Complete — PyMOL/ChimeraX script generation, sequence-to-structure alignment mapping
+- **Phase 7 (Evolutionary & Physicochemical Analysis)**: ✓ Complete — Evolutionary timeline, structural clustering, co-evolution networks, multi-level synthesis
+- **Phase 7b (Advanced Synthesis)**: ✓ Complete — Architectural domain mapping, community extraction, taxonomic distribution
+- **Dendrogram Visualizations**: ✓ Complete & Refined — Orientation standardization, style cleanup (endpoint removal), architecture normalization
+- All development uses TDD and the root virtual environment (`venv/`). Full test suite: **60/60 passing**.
 
 ## Methodology Summary
 
@@ -35,9 +37,11 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 13. Calculate 95th percentile threshold on raw pairwise scores; identify Specificity Determining Positions (SDPs).
 14. Generate dendrogram switch-event overlays and hierarchical score distributions.
 
-### Phase 6-7: Structural & Evolutionary Analysis (In Progress)
-15. Map trimmed alignment columns to PDB residue numbers; generate PyMOL scripts for SDP visualization.
+### Phase 6-7: Structural & Evolutionary Analysis (Complete)
+15. Map trimmed alignment columns to PDB residue numbers; generate PyMOL/ChimeraX scripts for SDP visualization.
 16. Analyze SDP evolution: phylogenetic depth timeline, 3D spatial clustering, co-evolution networks, physicochemical trajectories.
+17. Perform multilevel (Groups/Families/Subfamilies) architectural domain mapping, community extraction from coevolution matrices, and taxonomic SDP distribution analysis.
+18. Generate publication-ready visualizations with normalized (per-residue) architectural switch distributions and hierarchical dendrograms with refined styling.
 
 ## Repository Structure
 - `src/`: pipeline modules
@@ -46,7 +50,11 @@ This repository implements a reproducible BADASP-inspired computational pipeline
   - `msa_builder.py`: MAFFT alignment + trimAl trimming
   - `tree_builder.py`: FastTree tree construction
   - `tree_cluster.py`: topological clade clustering + LCA reporting
-  - `visualization.py`: QC and clustering visual outputs
+  - `badasp_core.py`: multilevel BADASP scoring + SDP identification
+  - `asr_runner.py`: IQ-TREE2 ancestral sequence reconstruction
+  - `pdb_mapper.py`: sequence-to-structure alignment + PyMOL/ChimeraX script generation
+  - `evolutionary_analysis.py`: evolutionary timeline, structural clustering, coevolution, physicochemical analysis, multilevel synthesis
+  - `visualization.py`: QC and clustering visual outputs including dendrogram rendering
 - `tests/`: pytest suite for all core modules
 - `data/raw/`: source sequence inputs (gitignored)
 - `data/interim/`: intermediate artifacts (gitignored)
@@ -55,12 +63,18 @@ This repository implements a reproducible BADASP-inspired computational pipeline
   - `results/sequence_filtering/`
   - `results/alignment_qc/`
   - `results/topological_clustering/`
+  - `results/badasp_scoring/`
+  - `results/structural_mapping/`
+  - `results/evolutionary_analysis/`
 
 ## Results Organization Policy
 Results are grouped by analysis purpose and never by phase number:
 - `results/sequence_filtering/`: sequence-length QC outputs
 - `results/alignment_qc/`: MSA quality outputs
-- `results/topological_clustering/`: tree-clade assignments, LCA summaries, and dendrograms
+- `results/topological_clustering/`: tree-clade assignments, LCA summaries, and dendrograms (rotated, color-refined, architecture-normalized)
+- `results/badasp_scoring/`: hierarchical BADASP scores, switch dendrograms, and score distributions
+- `results/structural_mapping/`: ChimeraX/PyMOL visualization scripts, PDB mappings, and legends
+- `results/evolutionary_analysis/`: phylogenetic timelines, structural clustering heatmaps, coevolution matrices, physicochemical shifts, architectural domain distributions (raw and normalized), taxonomic SDP mapping, and multilevel synthesized outputs
 
 ## Reproducibility Notes
 - Use root virtual environment commands, for example: `./venv/bin/python -m pytest -q`.

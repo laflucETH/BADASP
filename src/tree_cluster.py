@@ -11,9 +11,9 @@ import pandas as pd
 from scipy.cluster.hierarchy import fcluster
 
 try:
-    from src.visualization import plot_topological_dendrogram
+    from src.visualization import LEVEL_COLORS, build_terminal_color_map, plot_topological_dendrogram, plot_topological_tree_dendrogram, plot_tree_with_switches
 except ModuleNotFoundError:
-    from visualization import plot_topological_dendrogram
+    from visualization import LEVEL_COLORS, build_terminal_color_map, plot_topological_dendrogram, plot_topological_tree_dendrogram, plot_tree_with_switches
 
 
 def _compute_subtree_heights(clade: Clade) -> Dict[int, float]:
@@ -293,7 +293,8 @@ def cluster_tree_topologically(
                 writer.writerow([level_name, cluster_id, len(assignments[cluster_id]), lca_map[cluster_id]])
 
     if dendrogram_output is not None:
-        plot_topological_dendrogram(linkage_rows, dendrogram_output, color_threshold=family_distance_threshold)
+        tree_for_plot = rooted_tree_output if rooted_tree_output is not None else tree_path
+        plot_topological_tree_dendrogram(tree_for_plot, dendrogram_output)
 
     level_counts = {
         "group": len(group_assignments),
@@ -339,19 +340,19 @@ def write_hierarchical_tree_artifacts(
 
 def write_hierarchical_dendrograms(
     tree_path: Path,
+    assignments_csv: Path,
     thresholds: Dict[str, float],
     output_dir: Path,
 ) -> None:
-    tree = Phylo.read(str(tree_path), "newick")
-    tree.root_at_midpoint()
-    _, linkage_rows = tree_to_linkage(tree)
-
     output_dir.mkdir(parents=True, exist_ok=True)
     for plural_level, singular_level in (("groups", "group"), ("families", "family"), ("subfamilies", "subfamily")):
-        plot_topological_dendrogram(
-            linkage_rows,
+        terminal_colors = build_terminal_color_map(assignments_csv, f"{singular_level}_id")
+        plot_topological_tree_dendrogram(
+            tree_path,
             output_dir / f"tree_dendrogram_{plural_level}.svg",
-            color_threshold=thresholds[singular_level],
+            title=f"Topological Clustering Dendrogram ({plural_level.capitalize()})",
+            line_color="#B0B0B0",
+            terminal_colors=terminal_colors,
         )
 
 
@@ -393,7 +394,8 @@ def main() -> None:
     )
 
     write_hierarchical_dendrograms(
-        tree_path=Path(args.tree),
+        tree_path=Path(args.rooted_tree_output),
+        assignments_csv=Path(args.assignments_output),
         thresholds=level_thresholds,
         output_dir=Path(args.assignments_output).parent,
     )

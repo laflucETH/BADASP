@@ -281,7 +281,34 @@ def test_plot_dendrogram_with_switches_writes_svg(tmp_path: Path) -> None:
         output_svg=out_svg,
         title="Groups Dendrogram with Switches",
         color_threshold=0.2,
+        line_color="#1F77B4",
+        terminal_colors={"A": "#1F77B4", "B": "#1F77B4", "C": "#D95F02", "D": "#D95F02"},
     )
 
+    svg_text = out_svg.read_text(encoding="utf-8").lower()
     assert out_svg.exists()
     assert out_svg.stat().st_size > 0
+    assert "#1f77b4" in svg_text or "rgb(31, 119, 180)" in svg_text
+    assert "branch length from root" in svg_text
+
+
+def test_plot_topological_tree_dendrogram_keeps_level_color(tmp_path: Path) -> None:
+    from src.visualization import plot_topological_tree_dendrogram
+
+    tree_path = tmp_path / "tree.nwk"
+    out_svg = tmp_path / "tree_dendrogram.svg"
+
+    tree_path.write_text("((A:0.1,B:0.1):0.2,(C:0.1,D:0.1):0.2);\n", encoding="utf-8")
+
+    plot_topological_tree_dendrogram(
+        tree_path=tree_path,
+        output_svg=out_svg,
+        title="Tree Dendrogram",
+        line_color="#1F77B4",
+        terminal_colors={"A": "#1F77B4", "B": "#1F77B4", "C": "#D95F02", "D": "#D95F02"},
+    )
+
+    svg_text = out_svg.read_text(encoding="utf-8").lower()
+    assert out_svg.exists()
+    assert "#1f77b4" in svg_text or "rgb(31, 119, 180)" in svg_text
+    assert "branch length from root" in svg_text

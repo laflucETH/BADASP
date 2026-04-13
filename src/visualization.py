@@ -1,7 +1,7 @@
 import argparse
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -12,6 +12,55 @@ import seaborn as sns
 from Bio import Phylo, SeqIO
 from Bio.Phylo.BaseTree import Clade, Tree
 from scipy.cluster.hierarchy import dendrogram, fcluster, set_link_color_palette
+
+
+LEVEL_COLORS = {
+    "groups": "#1F77B4",
+    "families": "#D95F02",
+    "subfamilies": "#2CA02C",
+}
+
+
+def build_terminal_color_map(assignments_path: Path, cluster_column: str) -> Dict[str, str]:
+    assignments = pd.read_csv(assignments_path)
+    if cluster_column not in assignments.columns:
+        raise ValueError(f"Missing required column in {assignments_path}: {cluster_column}")
+
+    palette = [mcolors.to_hex(color) for color in (list(plt.cm.tab20.colors) + list(plt.cm.Set3.colors))]
+    color_map: Dict[str, str] = {}
+    unique_clusters = list(dict.fromkeys(assignments[cluster_column].dropna().tolist()))
+
+    for index, cluster_id in enumerate(unique_clusters):
+        color = palette[index % len(palette)]
+        members = assignments[assignments[cluster_column] == cluster_id]["sequence_id"].astype(str)
+        for sequence_id in members:
+            color_map[str(sequence_id)] = color
+
+    return color_map
+
+
+def _subtree_terminal_color(
+    clade: Clade,
+    terminal_colors: Optional[Dict[str, str]],
+    cache: Dict[int, Optional[str]],
+) -> Optional[str]:
+    if terminal_colors is None:
+        return None
+    key = id(clade)
+    if key in cache:
+        return cache[key]
+
+    if clade.is_terminal():
+        color = terminal_colors.get(str(clade.name))
+        cache[key] = color
+        return color
+
+    child_colors = [_subtree_terminal_color(child, terminal_colors, cache) for child in clade.clades]
+    non_null_colors = [color for color in child_colors if color is not None]
+    # Keep a subtree colored when all mapped descendants agree; unmapped leaves do not force gray.
+    color = non_null_colors[0] if non_null_colors and len(set(non_null_colors)) == 1 else None
+    cache[key] = color
+    return color
 
 
 def default_plot_paths() -> Tuple[Path, Path, Path]:
@@ -295,6 +344,59 @@ def _build_y_positions(tree: Tree) -> Dict[Clade, float]:
     return y_positions
 
 
+def _draw_rotated_tree_axes(
+    ax,
+    tree: Tree,
+    line_color: str = "#666666",
+    line_width: float = 0.7,
+    terminal_colors: Optional[Dict[str, str]] = None,
+) -> Tuple[Dict[Clade, float], Dict[Clade, float]]:
+    depths = tree.depths()
+    if not max(depths.values()):
+        depths = tree.depths(unit_branch_lengths=True)
+    x_positions = _build_y_positions(tree)
+    subtree_colors: Dict[int, Optional[str]] = {}
+
+    def _draw(node: Clade) -> None:
+        x = x_positions[node]
+        y = depths[node]
+        for child in node.clades:
+            child_x = x_positions[child]
+            child_y = depths[child]
+            child_color = _subtree_terminal_color(child, terminal_colors, subtree_colors)
+            branch_color = child_color or line_color
+            ax.plot([x, child_x], [y, y], color=branch_color, linewidth=line_width)
+            ax.plot([child_x, child_x], [y, child_y], color=branch_color, linewidth=line_width)
+            _draw(child)
+
+    _draw(tree.root)
+
+    return x_positions, depths
+
+
+def plot_topological_tree_dendrogram(
+    tree_path: Path,
+    output_svg: Path,
+    title: str = "Topological Clustering Dendrogram",
+    line_color: str = "#B0B0B0",
+    terminal_colors: Optional[Dict[str, str]] = None,
+) -> None:
+    tree = Phylo.read(str(tree_path), "newick")
+    _ensure_tree_node_names(tree)
+
+    output_svg.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(12, 8))
+    _draw_rotated_tree_axes(ax, tree, line_color=line_color, line_width=0.8, terminal_colors=terminal_colors)
+    ax.set_title(title)
+    ax.set_xlabel("Taxa / internal nodes")
+    ax.set_ylabel("Branch length from root")
+    ax.set_xticks([])
+    ax.invert_yaxis()
+    fig.tight_layout()
+    fig.savefig(output_svg, format="svg")
+    plt.close(fig)
+
+
 def build_switch_node_map(
     tree_path: Path,
     assignments_path: Path,
@@ -350,28 +452,20 @@ def plot_tree_with_switches(
     node_switch_counts: Dict[str, int],
     output_svg: Path,
     title: str,
+    line_color: str = "#B0B0B0",
+    terminal_colors: Optional[Dict[str, str]] = None,
 ) -> None:
     tree = Phylo.read(str(tree_path), "newick")
     _ensure_tree_node_names(tree)
 
-    depths = tree.depths()
-    if not max(depths.values()):
-        depths = tree.depths(unit_branch_lengths=True)
-    y_positions = _build_y_positions(tree)
-
     fig, ax = plt.subplots(figsize=(14, 10))
-
-    def _draw(node: Clade) -> None:
-        x = depths[node]
-        y = y_positions[node]
-        for child in node.clades:
-            child_x = depths[child]
-            child_y = y_positions[child]
-            ax.plot([x, child_x], [child_y, child_y], color="#666666", linewidth=0.7)
-            ax.plot([x, x], [y, child_y], color="#666666", linewidth=0.7)
-            _draw(child)
-
-    _draw(tree.root)
+    x_positions, depths = _draw_rotated_tree_axes(
+        ax,
+        tree,
+        line_color=line_color,
+        line_width=0.7,
+        terminal_colors=terminal_colors,
+    )
 
     switched_nodes = [(node, count) for node, count in node_switch_counts.items() if count > 0]
     if switched_nodes:
@@ -387,8 +481,8 @@ def plot_tree_with_switches(
             if node_name not in node_lookup:
                 continue
             clade = node_lookup[node_name]
-            xs.append(depths[clade])
-            ys.append(y_positions[clade])
+            xs.append(x_positions[clade])
+            ys.append(depths[clade])
             sizes.append(30.0 + (220.0 * (count / max_count)))
             colors.append(count)
 
@@ -397,9 +491,10 @@ def plot_tree_with_switches(
         cbar.set_label("Switch count")
 
     ax.set_title(title)
-    ax.set_xlabel("Branch length from root")
-    ax.set_ylabel("Taxa / internal nodes")
-    ax.set_yticks([])
+    ax.set_xlabel("Taxa / internal nodes")
+    ax.set_ylabel("Branch length from root")
+    ax.set_xticks([])
+    ax.invert_yaxis()
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(output_svg, format="svg")
@@ -440,18 +535,21 @@ def generate_tree_switch_plots(
         node_switch_counts=groups_map,
         output_svg=output_groups_svg,
         title="Switch Events on Tree: Groups",
+        line_color="#B0B0B0",
     )
     plot_tree_with_switches(
         tree_path=rooted_tree_path,
         node_switch_counts=families_map,
         output_svg=output_families_svg,
         title="Switch Events on Tree: Families",
+        line_color="#B0B0B0",
     )
     plot_tree_with_switches(
         tree_path=rooted_tree_path,
         node_switch_counts=subfamilies_map,
         output_svg=output_subfamilies_svg,
         title="Switch Events on Tree: Subfamilies",
+        line_color="#B0B0B0",
     )
 
 
@@ -489,10 +587,10 @@ def plot_dendrogram_with_switches(
     output_svg: Path,
     title: str,
     color_threshold: float,
+    line_color: str = "#B0B0B0",
+    terminal_colors: Optional[Dict[str, str]] = None,
     min_clade_size: int = 5,
 ) -> None:
-    from src.tree_cluster import tree_to_linkage
-
     level_map = {
         "groups": "group",
         "families": "family",
@@ -504,42 +602,10 @@ def plot_dendrogram_with_switches(
     id_col = f"{singular}_id"
 
     tree = Phylo.read(str(tree_path), "newick")
-    labels, linkage_rows = tree_to_linkage(tree)
-    linkage_matrix = np.asarray(linkage_rows, dtype=float)
-
-    dendro_meta = dendrogram(
-        linkage_matrix,
-        no_plot=True,
-        no_labels=True,
-        color_threshold=color_threshold,
-        above_threshold_color="#666666",
-    )
-
-    x_by_node, y_by_node, descendants = _compute_dendrogram_node_coords(
-        linkage_matrix=linkage_matrix,
-        leaves_order=[int(idx) for idx in dendro_meta["leaves"]],
-    )
-    descendant_to_node = {desc: node_id for node_id, desc in descendants.items() if node_id >= len(labels)}
-
-    leaf_cluster_ids = [int(x) for x in fcluster(linkage_matrix, t=float(color_threshold), criterion="distance")]
-    cluster_to_leaf_set: Dict[int, set] = defaultdict(set)
-    for leaf_idx, cluster_id in enumerate(leaf_cluster_ids):
-        cluster_to_leaf_set[cluster_id].add(leaf_idx)
-    underrepresented_leaf_sets = [leaf_set for leaf_set in cluster_to_leaf_set.values() if len(leaf_set) < min_clade_size]
-
-    ignored_node_ids = set()
-    for node_id, leaf_set in descendants.items():
-        if node_id < len(labels):
-            continue
-        for ignored_leaf_set in underrepresented_leaf_sets:
-            if leaf_set.issubset(ignored_leaf_set):
-                ignored_node_ids.add(node_id)
-                break
+    _ensure_tree_node_names(tree)
 
     assignments = pd.read_csv(assignments_path)
     cluster_members = assignments.groupby(id_col)["sequence_id"].apply(list).to_dict()
-    name_to_index = {name: idx for idx, name in enumerate(labels)}
-    indexed_names = set(name_to_index)
 
     raw_pairwise = _load_pairwise_table(raw_pairwise_path)
     switch_threshold = float(np.percentile(raw_pairwise["score"].astype(float), 95)) if not raw_pairwise.empty else 0.0
@@ -560,54 +626,32 @@ def plot_dendrogram_with_switches(
 
         pair_members = cluster_members[left_id] + cluster_members[right_id]
         lca = tree.common_ancestor(pair_members)
-        lca_leaves = [leaf.name for leaf in lca.get_terminals() if leaf.name in indexed_names]
-        idx_set = frozenset(name_to_index[name] for name in lca_leaves)
-        node_id = descendant_to_node.get(idx_set)
-        if node_id is not None:
-            node_switch_counts[node_id] += int(count)
+        if lca.name:
+            node_switch_counts[lca.name] += int(count)
 
-    mapped_coordinates = [
-        (x_by_node[node_id], y_by_node[node_id], node_switch_counts[node_id])
-        for node_id in node_switch_counts
-        if node_switch_counts[node_id] > 0
-    ]
+    node_lookup = {clade.name: clade for clade in tree.find_clades() if clade.name}
 
     print(f"Total pairs with switches > 0: {len(pairs_with_switches)}")
-    print(f"Total scatter points successfully mapped to coordinates: {len(mapped_coordinates)}")
+    print(f"Total scatter points successfully mapped to coordinates: {len([n for n in node_switch_counts if n in node_lookup])}")
 
     output_svg.parent.mkdir(parents=True, exist_ok=True)
-    palette = [plt.cm.tab20(i / 20) for i in range(20)] + [plt.cm.Set3(i / 12) for i in range(12)]
-    set_link_color_palette([mcolors.to_hex(c) for c in palette])
-
-    plt.figure(figsize=(12, 6))
-    dendrogram(
-        linkage_matrix,
-        no_labels=True,
-        color_threshold=color_threshold,
-        above_threshold_color="#666666",
+    fig, ax = plt.subplots(figsize=(12, 8))
+    x_positions, depths = _draw_rotated_tree_axes(
+        ax,
+        tree,
+        line_color=line_color,
+        line_width=0.8,
+        terminal_colors=terminal_colors,
     )
-    set_link_color_palette(None)
 
-    # Gray-out all branches that correspond to clades excluded by min_clade_size.
-    ax = plt.gca()
-    n_leaves = linkage_matrix.shape[0] + 1
-    for i, row in enumerate(linkage_matrix):
-        node_id = n_leaves + i
-        if node_id not in ignored_node_ids:
+    mapped_coordinates = []
+    for node_name, count in node_switch_counts.items():
+        if count <= 0 or node_name not in node_lookup:
             continue
-        left = int(row[0])
-        right = int(row[1])
-        y_parent = y_by_node[node_id]
-        x_left = x_by_node[left]
-        y_left = y_by_node[left]
-        x_right = x_by_node[right]
-        y_right = y_by_node[right]
-
-        # Horizontal connector at the merge height.
-        ax.plot([x_left, x_right], [y_parent, y_parent], color="#CCCCCC", linewidth=1.4, zorder=4)
-        # Vertical stems from children to the merge.
-        ax.plot([x_left, x_left], [y_left, y_parent], color="#CCCCCC", linewidth=1.4, zorder=4)
-        ax.plot([x_right, x_right], [y_right, y_parent], color="#CCCCCC", linewidth=1.4, zorder=4)
+        clade = node_lookup[node_name]
+        if len(clade.get_terminals()) < min_clade_size:
+            continue
+        mapped_coordinates.append((float(x_positions[clade]), float(depths[clade]), int(count)))
 
     if mapped_coordinates:
         switch_values = np.array([entry[2] for entry in mapped_coordinates], dtype=float)
@@ -616,7 +660,7 @@ def plot_dendrogram_with_switches(
         ys = [entry[1] for entry in mapped_coordinates]
         sizes = [40.0 + (260.0 * (val / max_val)) for val in switch_values]
 
-        scatter = plt.scatter(
+        scatter = ax.scatter(
             xs,
             ys,
             c=switch_values,
@@ -627,15 +671,17 @@ def plot_dendrogram_with_switches(
             alpha=0.9,
             zorder=5,
         )
-        cbar = plt.colorbar(scatter, pad=0.01)
+        cbar = fig.colorbar(scatter, ax=ax, pad=0.01)
         cbar.set_label("Switch count")
 
-    plt.title(title)
-    plt.xlabel("Collapsed Leaf Groups")
-    plt.ylabel("Cophenetic Distance")
-    plt.tight_layout()
-    plt.savefig(output_svg, format="svg")
-    plt.close()
+    ax.set_title(title)
+    ax.set_xlabel("Taxa / internal nodes")
+    ax.set_ylabel("Branch length from root")
+    ax.set_xticks([])
+    ax.invert_yaxis()
+    fig.tight_layout()
+    fig.savefig(output_svg, format="svg")
+    plt.close(fig)
 
 
 def generate_dendrogram_switch_plots(
@@ -652,6 +698,10 @@ def generate_dendrogram_switch_plots(
     subfamily_threshold: float,
     min_clade_size: int = 5,
 ) -> None:
+    groups_terminal_colors = build_terminal_color_map(assignments_path, "group_id")
+    families_terminal_colors = build_terminal_color_map(assignments_path, "family_id")
+    subfamilies_terminal_colors = build_terminal_color_map(assignments_path, "subfamily_id")
+
     plot_dendrogram_with_switches(
         tree_path=tree_path,
         assignments_path=assignments_path,
@@ -660,6 +710,8 @@ def generate_dendrogram_switch_plots(
         output_svg=output_groups_svg,
         title="Groups Dendrogram with Switch Events",
         color_threshold=group_threshold,
+        line_color="#B0B0B0",
+        terminal_colors=groups_terminal_colors,
         min_clade_size=min_clade_size,
     )
     plot_dendrogram_with_switches(
@@ -670,6 +722,8 @@ def generate_dendrogram_switch_plots(
         output_svg=output_families_svg,
         title="Families Dendrogram with Switch Events",
         color_threshold=family_threshold,
+        line_color="#B0B0B0",
+        terminal_colors=families_terminal_colors,
         min_clade_size=min_clade_size,
     )
     plot_dendrogram_with_switches(
@@ -680,6 +734,8 @@ def generate_dendrogram_switch_plots(
         output_svg=output_subfamilies_svg,
         title="Subfamilies Dendrogram with Switch Events",
         color_threshold=subfamily_threshold,
+        line_color="#B0B0B0",
+        terminal_colors=subfamilies_terminal_colors,
         min_clade_size=min_clade_size,
     )
 
