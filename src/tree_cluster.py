@@ -241,10 +241,11 @@ def cluster_tree_topologically(
     family_map = _level_membership_map(family_assignments)
     subfamily_map = _level_membership_map(subfamily_assignments)
 
-    # Keep only sequences mapped in all three levels.
-    sequence_ids = sorted(set(group_map) & set(family_map) & set(subfamily_map))
+    # Keep sequences independently per level. A sequence may be valid for groups
+    # while filtered at family/subfamily due level-specific min-clade-size rules.
+    sequence_ids = sorted(set(labels))
     if not sequence_ids:
-        raise ValueError("No sequences overlap across group/family/subfamily levels.")
+        raise ValueError("No sequences found in clustered tree labels.")
 
     group_lca = {cid: _resolve_lca_label(tree, members) for cid, members in group_assignments.items()}
     family_lca = {cid: _resolve_lca_label(tree, members) for cid, members in family_assignments.items()}
@@ -265,18 +266,18 @@ def cluster_tree_topologically(
             ]
         )
         for sequence_id in sequence_ids:
-            gid = group_map[sequence_id]
-            fid = family_map[sequence_id]
-            sid = subfamily_map[sequence_id]
+            gid = group_map.get(sequence_id)
+            fid = family_map.get(sequence_id)
+            sid = subfamily_map.get(sequence_id)
             writer.writerow(
                 [
                     sequence_id,
-                    gid,
-                    group_lca[gid],
-                    fid,
-                    family_lca[fid],
-                    sid,
-                    subfamily_lca[sid],
+                    gid if gid is not None else "",
+                    group_lca[gid] if gid is not None else "",
+                    fid if fid is not None else "",
+                    family_lca[fid] if fid is not None else "",
+                    sid if sid is not None else "",
+                    subfamily_lca[sid] if sid is not None else "",
                 ]
             )
 

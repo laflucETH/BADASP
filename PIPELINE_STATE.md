@@ -146,6 +146,22 @@
     - `results/topological_clustering/tree_dendrogram_groups.svg`
     - `results/topological_clustering/tree_dendrogram_families.svg`
     - `results/topological_clustering/tree_dendrogram_subfamilies.svg`
+- Independent per-level clade filtering fix:
+  - Updated hierarchical assignment writing in `src/tree_cluster.py` to keep level membership independently (no global `group ∩ family ∩ subfamily` sequence intersection).
+  - Updated `src/badasp_core.py` filtering to apply min-clade-size independently per level before pair-building/scoring.
+  - Added NaN-safe LCA label handling in `_resolve_hierarchical_lca_nodes`.
+  - Added regression test: `tests/test_tree_cluster.py::test_cluster_tree_topologically_keeps_group_members_even_if_family_filtered`.
+  - Regenerated clustering and switch dendrogram artifacts with fixed semantics.
+  - Validation: targeted clustering/scoring tests passing (`12/12`) and full suite passing (`63/63`).
+- Linkage-coordinate dendrogram exports (cophenetic axis):
+  - Generated level-specific linkage plots from the midpoint-rooted tree linkage matrix:
+    - `results/topological_clustering/linkage_dendrogram_groups.svg` (cut threshold: 8.579924)
+    - `results/topological_clustering/linkage_dendrogram_families.svg` (cut threshold: 6.929765)
+    - `results/topological_clustering/linkage_dendrogram_subfamilies.svg` (cut threshold: 4.729553)
+  - These plots use linkage/cophenetic coordinates (`Cophenetic Distance`) rather than branch-depth-from-root coordinates.
+- Results CSV tracking policy update:
+  - Generated CSV outputs under `results/` are now treated as local artifacts and are not tracked in git.
+  - Committed outputs remain SVG/tree artifacts and source code/tests/docs.
 - Architectural distribution normalization pass:
   - Added residue-length normalization option for architectural switch plots (`switches per residue`).
   - Re-generated raw and normalized per-level outputs:
@@ -188,6 +204,10 @@
   - `results/topological_clustering/midpoint_rooted_families.tree`
   - `results/topological_clustering/midpoint_rooted_subfamilies.tree`
 - Topological clades generated (after min-size filter >=5): 34
+- Hierarchy clades generated in latest independent-filter rerun (after min-size filter >=5):
+  - Groups: 6
+  - Families: 34
+  - Subfamilies: 126
 - Minimum clade size retained: 5
 - Tree rooting mode for clustering: midpoint-rooted
 - Distance threshold selection: adaptive search targeting 20-80 clades
@@ -207,12 +227,16 @@
   - `results/topological_clustering/tree_dendrogram_groups.svg`
   - `results/topological_clustering/tree_dendrogram_families.svg`
   - `results/topological_clustering/tree_dendrogram_subfamilies.svg`
+- Switch-event dendrogram semantics:
+  - Circle sizes encode aggregated threshold-exceeding pairwise switch events mapped to each LCA node.
+  - Summary statistics in `switch_statistics_summary.csv` and `badasp_scores_*.csv` remain position-based `switch_count` tables.
 
 ## Phase 4 Metrics (Ancestral Sequence Reconstruction)
 - ASR engine: IQ-TREE2 (`-asr`)
 - ASR run prefix: `data/interim/asr_run`
 - Tree used for refreshed ASR run: `results/topological_clustering/midpoint_rooted.tree`
 - Assignments used for refreshed ASR run: `results/topological_clustering/tree_cluster_assignments.csv`
+- Reconstruction method: parse the IQ-TREE `.state` file into per-node amino-acid sequences, then resolve each hierarchical `*_lca_node` on the ASR tree and extract its corresponding ancestral sequence.
 - LCA ancestral sequences written: 34
 - LCA ancestral FASTA output: `data/interim/ancestral_sequences.fasta`
 - Refresh status: completed after rooted-tree and 34-clade Phase 3 rerun.
@@ -346,6 +370,17 @@
 - Master dendrogram overlay export:
   - `results/evolutionary_analysis/master_dendrogram_switches.svg`
 - ToolUniverse literature query run (latest): 9 candidate hits retrieved for IPR019888/AraC specificity queries
+- Architectural domain switch-count box plots:
+  - `results/evolutionary_analysis/architectural_boxplot_groups.svg` (48K)
+  - `results/evolutionary_analysis/architectural_boxplot_families.svg` (45K)
+  - `results/evolutionary_analysis/architectural_boxplot_subfamilies.svg` (45K)
+  - Content: compact horizontal box-whisker distribution of raw switch counts within 4 architectural domains
+    - HTH scaffold (residues 6-34) — blue
+    - Recognition helix (residues 35-50) — red
+    - HTH linker (residues 51-67) — green
+    - RAM domain (residues 68-152) — orange
+  - Sample size (number of positions) per domain labeled in the y-axis ticks
+  - Publication-ready 300 DPI SVG format
 
 ## Phase Status
 - Phase 1 (Architecture & Data Ingestion): complete

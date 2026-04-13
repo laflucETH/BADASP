@@ -421,6 +421,68 @@ def _domain_residue_width(domain_arch: Dict[str, Sequence[int]], domain: str) ->
     return max(1, (end - start) + 1)
 
 
+def _collect_architecture_switch_values(level_scores: pd.DataFrame, domain_arch: Dict[str, Sequence[int]]) -> Dict[str, List[int]]:
+    values: Dict[str, List[int]] = {domain: [] for domain in domain_arch}
+    if level_scores.empty:
+        return values
+
+    score_table = level_scores[["position", "switch_count"]].copy()
+    score_table["position"] = score_table["position"].astype(int)
+    score_table["switch_count"] = score_table["switch_count"].fillna(0).astype(int)
+
+    for domain, span in domain_arch.items():
+        start, end = int(span[0]), int(span[1])
+        domain_values = score_table.loc[
+            (score_table["position"] >= start) & (score_table["position"] <= end),
+            "switch_count",
+        ]
+        values[domain] = [int(value) for value in domain_values.tolist()]
+    return values
+
+
+def _plot_architecture_boxplot(
+    level_scores: pd.DataFrame,
+    domain_arch: Dict[str, Sequence[int]],
+    output_svg: Path,
+    level: str,
+) -> None:
+    domain_values = _collect_architecture_switch_values(level_scores, domain_arch)
+
+    domains = list(domain_arch.keys())
+    data = [domain_values[domain] for domain in domains]
+    color = "#4C78A8"
+
+    fig, ax = plt.subplots(figsize=(9.0, 3.6))
+    box = ax.boxplot(
+        data,
+        tick_labels=[f"{domain}\n(n={len(values)})" for domain, values in zip(domains, data)],
+        vert=False,
+        patch_artist=True,
+        showmeans=True,
+        meanline=True,
+        showfliers=False,
+        medianprops={"linewidth": 0.0, "color": "none"},
+        meanprops={"color": "#111111", "linewidth": 1.8},
+        boxprops={"linewidth": 1.1, "edgecolor": "#444444"},
+        whiskerprops={"linewidth": 1.0, "color": "#444444"},
+        capprops={"linewidth": 1.0, "color": "#444444"},
+    )
+
+    for patch in box["boxes"]:
+        patch.set_facecolor(color)
+        patch.set_alpha(0.82)
+
+    ax.set_xlabel("Switch Count")
+    ax.set_ylabel("Architectural Domain")
+    ax.set_title(f"Architectural Switch Count Distribution ({level.capitalize()})")
+    ax.set_xlim(left=0)
+    ax.grid(axis="x", color="#DDDDDD", linewidth=0.6)
+    fig.subplots_adjust(left=0.30, right=0.98, top=0.86, bottom=0.20)
+    output_svg.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_svg, format="svg")
+    plt.close(fig)
+
+
 def _plot_architecture_distribution(
     counts: Dict[str, int],
     domain_arch: Dict[str, Sequence[int]],
@@ -916,6 +978,15 @@ def run_phase7_analyses(
         arch_norm_svg = output_dir / f"architectural_distribution_{level}_normalized.svg"
         _plot_architecture_distribution(domain_counts, domain_architecture, arch_norm_svg, level, normalize=True)
         outputs[f"architectural_distribution_svg_normalized_{level}"] = arch_norm_svg
+
+        arch_box_svg = output_dir / f"architectural_boxplot_{level}.svg"
+        _plot_architecture_boxplot(level_scores, domain_architecture, arch_box_svg, level)
+        outputs[f"architectural_boxplot_svg_{level}"] = arch_box_svg
+
+        enrichment_df = _compute_architecture_enrichment(level_scores, domain_architecture)
+        enrichment_csv = output_dir / f"architectural_enrichment_{level}.csv"
+        enrichment_df.to_csv(enrichment_csv, index=False)
+        outputs[f"architectural_enrichment_csv_{level}"] = enrichment_csv
 
         communities = assign_coevolution_communities(coevo_matrix, distance_cut=0.6)
         communities["level"] = level

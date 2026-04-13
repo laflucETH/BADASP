@@ -42,10 +42,8 @@ results_clustered/**
 !results/topological_clustering/.gitkeep
 !results/badasp_scoring/.gitkeep
 
-# Track Phase 3 and Phase 5 outputs
-!results/topological_clustering/*.csv
+# Track only tree outputs and keep CSV outputs local/untracked
 !results/topological_clustering/*.tree
-!results/badasp_scoring/*.csv
 
 # Exploratory and test scripts (not part of production pipeline)
 src/data_fetcher.py

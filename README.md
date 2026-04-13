@@ -28,20 +28,23 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 6. Root tree at midpoint; convert to hierarchical linkage representation.
 7. Cut hierarchy into monophyletic clades by cophenetic-distance threshold (adaptive search).
 8. Retain clades ≥5 sequences (3-level hierarchy: Groups, Families, Subfamilies).
+  - Filtering is applied independently per hierarchy level (group/family/subfamily), not as a cross-level intersection.
 9. Identify and extract clade Last Common Ancestors (LCAs).
 
 ### Phase 4-5: Ancestral Reconstruction & Scoring
-10. Run IQ-TREE2 ASR to infer ancestral amino acid sequences at internal nodes.
-11. Compute restricted BADASP scores for nearest-sister clade pairs within hierarchy.
-12. Score formula: `RC - (AC * p(AC))` where RC=conservation, AC=ancestral call, p(AC)=posterior probability.
-13. Calculate 95th percentile threshold on raw pairwise scores; identify Specificity Determining Positions (SDPs).
-14. Generate dendrogram switch-event overlays and hierarchical score distributions.
+10. Run IQ-TREE2 ASR (`-asr`) to infer ancestral amino acid sequences at internal nodes, then parse the resulting `.state` file into per-node sequences.
+11. Map hierarchical LCA nodes from the clustering assignments onto the ASR tree and extract the corresponding ancestral sequences.
+12. Compute restricted BADASP scores for nearest-sister clade pairs within hierarchy.
+13. Score formula: `RC - (AC * p(AC))` where RC=conservation, AC=ancestral call, p(AC)=posterior probability.
+14. Calculate 95th percentile threshold on raw pairwise scores; identify Specificity Determining Positions (SDPs).
+15. Generate dendrogram switch-event overlays and hierarchical score distributions.
+  - Dendrogram circle sizes reflect aggregated threshold-exceeding pairwise switch events at each LCA node; the per-position `switch_count` tables remain the source for summary statistics.
 
 ### Phase 6-7: Structural & Evolutionary Analysis (Complete)
-15. Map trimmed alignment columns to PDB residue numbers; generate PyMOL/ChimeraX scripts for SDP visualization.
-16. Analyze SDP evolution: phylogenetic depth timeline, 3D spatial clustering, co-evolution networks, physicochemical trajectories.
-17. Perform multilevel (Groups/Families/Subfamilies) architectural domain mapping, community extraction from coevolution matrices, and taxonomic SDP distribution analysis.
-18. Generate publication-ready visualizations with normalized (per-residue) architectural switch distributions and hierarchical dendrograms with refined styling.
+16. Map trimmed alignment columns to PDB residue numbers; generate PyMOL/ChimeraX scripts for SDP visualization.
+17. Analyze SDP evolution: phylogenetic depth timeline, 3D spatial clustering, co-evolution networks, physicochemical trajectories.
+18. Perform multilevel (Groups/Families/Subfamilies) architectural domain mapping, community extraction from coevolution matrices, and taxonomic SDP distribution analysis.
+19. Generate publication-ready visualizations with architectural switch distributions, compact count-based boxplots, and hierarchical dendrograms with refined styling.
 
 ## Repository Structure
 - `src/`: pipeline modules
@@ -72,9 +75,14 @@ Results are grouped by analysis purpose and never by phase number:
 - `results/sequence_filtering/`: sequence-length QC outputs
 - `results/alignment_qc/`: MSA quality outputs
 - `results/topological_clustering/`: tree-clade assignments, LCA summaries, and dendrograms (rotated, color-refined, architecture-normalized)
-- `results/badasp_scoring/`: hierarchical BADASP scores, switch dendrograms, and score distributions
+- `results/badasp_scoring/`: hierarchical BADASP scores, switch dendrograms, score distributions, and switch statistics analysis
+  - `switch_statistics_summary.csv`: aggregate metrics across hierarchy levels
+  - `clade_switch_involvement.csv`: per-clade switch involvement data
+  - `plot_*.svg`: publication-ready visualizations (7 plots showing position counts, distributions, top positions, BADASP correlations, frequency data)
 - `results/structural_mapping/`: ChimeraX/PyMOL visualization scripts, PDB mappings, and legends
-- `results/evolutionary_analysis/`: phylogenetic timelines, structural clustering heatmaps, coevolution matrices, physicochemical shifts, architectural domain distributions (raw and normalized), taxonomic SDP mapping, and multilevel synthesized outputs
+- `results/evolutionary_analysis/`: phylogenetic timelines, structural clustering heatmaps, coevolution matrices, physicochemical shifts, architectural domain distributions, compact count-based boxplots, taxonomic SDP mapping, and multilevel synthesized outputs
+
+Generated CSV outputs under `results/` are treated as local analysis artifacts and are not tracked in git; tree files and SVG figures remain available for committed outputs when needed.
 
 ## Reproducibility Notes
 - Use root virtual environment commands, for example: `./venv/bin/python -m pytest -q`.

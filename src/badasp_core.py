@@ -212,7 +212,10 @@ def _resolve_hierarchical_lca_nodes(assignments: pd.DataFrame, tree: Tree) -> Di
     for _, row in assignments.iterrows():
         sequence_id = str(row["sequence_id"])
         for col in lca_columns:
-            label = str(row[col]).strip()
+            raw_label = row[col]
+            if pd.isna(raw_label):
+                continue
+            label = str(raw_label).strip()
             if label and sequence_id not in node_members[label]:
                 node_members[label].append(sequence_id)
 
@@ -398,39 +401,49 @@ def compute_multilevel_badasp_scores(
     if asr_tree_path.exists():
         asr_tree = Phylo.read(str(asr_tree_path), "newick")
 
-    filtered = assignments.copy()
+    filtered_by_level: Dict[str, pd.DataFrame] = {}
     level_label = {
         "group": "Groups",
         "family": "Families",
         "subfamily": "Subfamilies",
     }
     for level in ("group", "family", "subfamily"):
-        id_col, _ = _level_columns(filtered, level)
-        pre_counts = filtered.groupby(id_col).size()
+        id_col, _ = _level_columns(assignments, level)
+        pre_counts = assignments.groupby(id_col).size()
         pre_cluster_count = int(pre_counts.shape[0])
-        counts = filtered.groupby(id_col).size()
+        counts = assignments.groupby(id_col).size()
         valid = counts[counts >= min_clade_size].index.tolist()
-        filtered = filtered[filtered[id_col].isin(valid)]
+        filtered_level = assignments[assignments[id_col].isin(valid)].copy()
+        filtered_by_level[level] = filtered_level
         post_cluster_count = int(len(valid))
         dropped_cluster_count = pre_cluster_count - post_cluster_count
         print(
             f"{level_label[level]}: {post_cluster_count} kept, {dropped_cluster_count} dropped (size < {min_clade_size})"
         )
 
-    resolved_lca_nodes = _resolve_hierarchical_lca_nodes(filtered, asr_tree)
+    resolved_lca_nodes = _resolve_hierarchical_lca_nodes(assignments, asr_tree)
 
     results: Dict[str, Dict[str, object]] = {}
-    hierarchical_pairs = build_hierarchical_sister_pairs(filtered, tree_path)
+    hierarchical_pairs = {
+        "groups": _nearest_sister_pairs_for_level(filtered_by_level["group"], "group", topology_tree),
+        "families": _nearest_sister_pairs_for_level(
+            filtered_by_level["family"], "family", topology_tree, parent_col="group_id"
+        ),
+        "subfamilies": _nearest_sister_pairs_for_level(
+            filtered_by_level["subfamily"], "subfamily", topology_tree, parent_col="family_id"
+        ),
+    }
     level_name_map = {
         "groups": "group",
         "families": "family",
         "subfamilies": "subfamily",
     }
     for level in ("groups", "families", "subfamilies"):
+        level_singular = level_name_map[level]
         result = _compute_level_scores(
-            level=level_name_map[level],
+            level=level_singular,
             alignment=alignment,
-            assignments=filtered,
+            assignments=filtered_by_level[level_singular],
             ancestral_seqs=ancestral_seqs,
             state_data=state_data,
             pairs=hierarchical_pairs[level],

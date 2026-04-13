@@ -157,3 +157,33 @@ def test_write_hierarchical_tree_artifacts_writes_level_specific_csv_and_tree_fi
 
     groups_csv = pd.read_csv(output_dir / "tree_clusters_groups.csv")
     assert list(groups_csv["level"]) == ["group"]
+
+
+def test_cluster_tree_topologically_keeps_group_members_even_if_family_filtered(tmp_path: Path) -> None:
+    tree_path = tmp_path / "toy.tree"
+    clusters_csv = tmp_path / "tree_clusters.csv"
+    assignments_csv = tmp_path / "tree_cluster_assignments.csv"
+
+    tree_path.write_text(
+        "(((A:0.01,B:0.01):0.01,C:0.45):0.5,((D:0.01,E:0.01):0.01,F:0.45):0.5);\n",
+        encoding="utf-8",
+    )
+
+    cluster_tree_topologically(
+        tree_path=tree_path,
+        clusters_output=clusters_csv,
+        assignments_output=assignments_csv,
+        min_clade_size=2,
+        group_distance_threshold=1.0,
+        family_distance_threshold=0.3,
+        subfamily_distance_threshold=0.02,
+    )
+
+    assignments = pd.read_csv(assignments_csv)
+    by_seq = assignments.set_index("sequence_id")
+
+    # C and F belong to valid groups of size 3 but fall into filtered family/subfamily singletons.
+    assert pd.notna(by_seq.loc["C", "group_id"])
+    assert pd.notna(by_seq.loc["F", "group_id"])
+    assert pd.isna(by_seq.loc["C", "family_id"])
+    assert pd.isna(by_seq.loc["F", "family_id"])

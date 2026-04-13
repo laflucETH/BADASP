@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 
 from src.evolutionary_analysis import (
+    _collect_architecture_switch_values,
+    _plot_architecture_boxplot,
     _plot_master_dendrogram,
     assign_coevolution_communities,
     calculate_ca_distance_matrix,
@@ -122,6 +124,52 @@ def test_count_switches_per_domain() -> None:
     assert counts["RAM_domain"] == 3
     assert counts["DNA_binding_domain"] == 3
     assert counts["Recognition_helix"] == 2
+
+
+def test_collect_architecture_switch_values_uses_raw_counts() -> None:
+    scores = pd.DataFrame(
+        {
+            "position": list(range(1, 41)),
+            "switch_count": [2] * 10 + [0] * 10 + [1] * 10 + [3] * 10,
+        }
+    )
+    domains = {
+        "HTH_Scaffold": [1, 10],
+        "Recognition_Helix": [11, 20],
+        "HTH_Linker": [21, 30],
+        "RAM_domain": [31, 40],
+    }
+
+    values = _collect_architecture_switch_values(scores, domains)
+
+    assert values["HTH_Scaffold"] == [2] * 10
+    assert values["Recognition_Helix"] == [0] * 10
+    assert values["HTH_Linker"] == [1] * 10
+    assert values["RAM_domain"] == [3] * 10
+
+
+def test_plot_architecture_boxplot_writes_mean_based_svg(tmp_path: Path) -> None:
+    scores = pd.DataFrame(
+        {
+            "position": list(range(1, 41)),
+            "switch_count": [2] * 10 + [0] * 10 + [1] * 10 + [3] * 10,
+        }
+    )
+    domains = {
+        "HTH_Scaffold": [1, 10],
+        "Recognition_Helix": [11, 20],
+        "HTH_Linker": [21, 30],
+        "RAM_domain": [31, 40],
+    }
+    output_svg = tmp_path / "architectural_boxplot_groups.svg"
+
+    _plot_architecture_boxplot(scores, domains, output_svg, level="groups")
+
+    svg_text = output_svg.read_text()
+    assert output_svg.exists()
+    assert "Switch Count" in svg_text
+    assert "Architectural Domain" in svg_text
+    assert "Holm-corrected" not in svg_text
 
 
 def test_assign_coevolution_communities() -> None:
