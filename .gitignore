@@ -42,9 +42,6 @@ results_clustered/**
 !results/topological_clustering/.gitkeep
 !results/badasp_scoring/.gitkeep
 
-# Track only tree outputs and keep CSV outputs local/untracked
-!results/topological_clustering/*.tree
-
 # Exploratory and test scripts (not part of production pipeline)
 src/data_fetcher.py
 src/sequence_cluster.py
