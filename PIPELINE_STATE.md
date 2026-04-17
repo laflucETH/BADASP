@@ -4,7 +4,19 @@
 - Name: BADASP replication pipeline for IPR019888 (PF13404 track included)
 - Mode: Reproducible, modular Python workflow
 - Current date: 2026-04-17
-- Status: Refactor/Expansion in progress (stable Phase 7 baseline preserved)
+- Status: Weekend checkpoint prepared; ready to resume Monday from stabilized MAD-rooting integration
+
+## Weekend Checkpoint (2026-04-17)
+- Rooting integration was simplified to one canonical MAD implementation path in pipeline code:
+  - `src/tree_rooting.py` now always invokes `venv/bin/mad.py` for `method="mad"`.
+  - `src/tree_cluster.py` no longer exposes a `--mad-executable` override, eliminating binary-vs-python ambiguity.
+- Midpoint rooting remains available only as the explicit alternative mode (`--rooting-method midpoint`) or as fallback when `venv/bin/mad.py` is absent.
+- Validation after refactor:
+  - Targeted tests: `tests/test_tree_rooting.py` + `tests/test_tree_cluster.py` -> 11 passed.
+  - Full suite: 89 passed.
+- Monday resume point:
+  - Re-run Phase 3 with canonical MAD path and verify `results/topological_clustering/mad_rooted.tree` freshness.
+  - Then run Phase 4 reuse extraction (`src/asr_runner.py --reuse-existing`) and continue reconciliation outputs.
 
 ## Architecture Snapshot
 - Active root workspace now contains a fresh Phase 1 scaffold.
@@ -12,7 +24,7 @@
 - Project instructions are now codified in `.github/copilot-instructions.md` with explicit phase approval stops, descriptive results directories, vector-output policy, TDD, and root-venv enforcement.
 - Refactor track enabled for optional modules without altering the validated Phase 7 baseline:
   - Optional aligner backend selection (`mafft` default, `famsa` optional)
-  - Optional tree rooting mode selection (`midpoint` default, `mad` optional)
+  - Tree rooting method selection (`mad` default via canonical `venv/bin/mad.py`, `midpoint` optional)
   - Planned exploratory Phase 9 module for gene/species tree reconciliation outputs
 
 ## Hardware Optimization Checkpoint
@@ -31,6 +43,13 @@
 - Defaults updated:
   - `src/msa_builder.py` now defaults to `famsa` (CLI `--aligner` default changed from `mafft` to `famsa`).
   - `src/tree_cluster.py` now defaults to `--rooting-method mad` and default rooted tree output `results/topological_clustering/mad_rooted.tree`.
+- Real-data 0.80 pipeline regeneration completed:
+  - `src/sequence_cluster.py` produced `21641` CD-HIT representatives from `110022` length-filtered sequences at identity `0.80`.
+  - `src/msa_builder.py` produced a trimmed alignment with `169` columns using FAMSA.
+  - `src/tree_builder.py` wrote `data/interim/IPR019888.tree` with the native OpenMP FastTreeMP binary.
+  - `src/tree_cluster.py` wrote the hierarchical cluster CSVs and rooted tree artifacts under `results/topological_clustering/`.
+  - MAD was unavailable on this machine, so `root_tree()` fell back to midpoint rooting for the completed run.
+  - `src/asr_runner.py --reuse-existing` extracted `144` LCA ancestral sequences into `data/interim/ancestral_sequences.fasta` from the existing IQ-TREE checkpoint.
 - MAD rooting integration (TDD-first):
   - New module: `src/tree_rooting.py` with `root_tree()` wrapper supporting `mad` and `midpoint` methods.
   - New tests: `tests/test_tree_rooting.py`.

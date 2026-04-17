@@ -1,15 +1,18 @@
 import shutil
 import subprocess
+import warnings
 from pathlib import Path
 
 from Bio import Phylo
+
+
+CANONICAL_MAD_EXECUTABLE = Path("venv/bin/mad.py")
 
 
 def root_tree(
     input_tree: Path,
     output_tree: Path,
     method: str = "mad",
-    mad_executable: str = "mad.py",
 ) -> Path:
     output_tree.parent.mkdir(parents=True, exist_ok=True)
 
@@ -22,8 +25,20 @@ def root_tree(
     if method != "mad":
         raise ValueError(f"Unsupported rooting method: {method}. Expected one of: mad, midpoint")
 
+    mad_script = CANONICAL_MAD_EXECUTABLE
+    if not mad_script.exists():
+        warnings.warn(
+            f"MAD executable '{mad_script}' not found; falling back to midpoint rooting.",
+            UserWarning,
+            stacklevel=2,
+        )
+        tree = Phylo.read(str(input_tree), "newick")
+        tree.root_at_midpoint()
+        Phylo.write(tree, str(output_tree), "newick")
+        return output_tree
+
     result = subprocess.run(
-        [mad_executable, str(input_tree)],
+        [str(mad_script), str(input_tree)],
         check=True,
         capture_output=True,
         text=True,

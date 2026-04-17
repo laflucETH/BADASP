@@ -33,17 +33,20 @@ def test_root_tree_mad_invokes_external_tool_and_uses_generated_output(monkeypat
         mad_generated.write_text("[&R]((A:0.1,B:0.2):0.3,(C:0.2,D:0.1):0.4);\n", encoding="utf-8")
         return None
 
+    mad_exec = tmp_path / "mad.py"
+    mad_exec.write_text("#!/usr/bin/env python\n", encoding="utf-8")
+
     monkeypatch.setattr("subprocess.run", _mock_run)
+    monkeypatch.setattr("src.tree_rooting.CANONICAL_MAD_EXECUTABLE", mad_exec)
 
     rooted_path = root_tree(
         input_tree=input_tree,
         output_tree=output_tree,
         method="mad",
-        mad_executable="mad.py",
     )
 
     assert calls
-    assert calls[0][0] == "mad.py"
+    assert calls[0][0] == str(mad_exec)
     assert calls[0][1] == str(input_tree)
     assert rooted_path == output_tree
     assert output_tree.exists()
@@ -53,6 +56,10 @@ def test_root_tree_mad_raises_if_no_rooted_output_found(monkeypatch, tmp_path: P
     input_tree = tmp_path / "input.tree"
     output_tree = tmp_path / "mad_rooted.tree"
     input_tree.write_text("((A:0.1,B:0.2):0.3,(C:0.2,D:0.1):0.4);\n", encoding="utf-8")
+
+    mad_exec = tmp_path / "mad.py"
+    mad_exec.write_text("#!/usr/bin/env python\n", encoding="utf-8")
+    monkeypatch.setattr("src.tree_rooting.CANONICAL_MAD_EXECUTABLE", mad_exec)
 
     def _mock_run(cmd, check, capture_output=False, text=False):
         assert check is True
@@ -65,5 +72,24 @@ def test_root_tree_mad_raises_if_no_rooted_output_found(monkeypatch, tmp_path: P
             input_tree=input_tree,
             output_tree=output_tree,
             method="mad",
-            mad_executable="mad.py",
         )
+
+
+def test_root_tree_mad_falls_back_to_midpoint_when_executable_missing(monkeypatch, tmp_path: Path) -> None:
+    input_tree = tmp_path / "input.tree"
+    output_tree = tmp_path / "fallback_rooted.tree"
+    input_tree.write_text("((A:0.1,B:0.2):0.3,(C:0.2,D:0.1):0.4);\n", encoding="utf-8")
+
+    monkeypatch.setattr("src.tree_rooting.CANONICAL_MAD_EXECUTABLE", tmp_path / "missing_mad.py")
+
+    with pytest.warns(UserWarning, match="falling back to midpoint rooting"):
+        rooted_path = root_tree(
+            input_tree=input_tree,
+            output_tree=output_tree,
+            method="mad",
+        )
+
+    assert rooted_path == output_tree
+    assert output_tree.exists()
+    parsed = Phylo.read(str(output_tree), "newick")
+    assert parsed.root is not None

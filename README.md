@@ -13,7 +13,7 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 - **Phase 7 (Evolutionary & Physicochemical Analysis)**: ✓ Complete — Evolutionary timeline, structural clustering, co-evolution networks, multi-level synthesis
 - **Phase 7b (Advanced Synthesis)**: ✓ Complete — Architectural domain mapping, community extraction, taxonomic distribution
 - **Dendrogram Visualizations**: ✓ Complete & Refined — Orientation standardization, style cleanup (endpoint removal), architecture normalization
-- All development uses TDD and the root virtual environment (`venv/`). Full test suite: **60/60 passing**.
+- All development uses TDD and the root virtual environment (`venv/`). Full test suite: **89/89 passing**.
 
 ## Methodology Summary
 
@@ -25,7 +25,7 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 5. Build ML phylogeny with native OpenMP FastTreeMP on Apple Silicon, with automatic fallback to FastTree if needed.
 
 ### Phase 3: Topological Subfamily Clustering
-6. Root tree at midpoint; convert to hierarchical linkage representation.
+6. Root tree with the canonical MAD Python implementation (`venv/bin/mad.py`); if unavailable, fall back to midpoint rooting.
 7. Cut hierarchy into monophyletic clades by cophenetic-distance threshold (adaptive search).
 8. Retain clades ≥5 sequences (3-level hierarchy: Groups, Families, Subfamilies).
   - Filtering is applied independently per hierarchy level (group/family/subfamily), not as a cross-level intersection.
@@ -88,6 +88,7 @@ Generated CSV outputs under `results/` are treated as local analysis artifacts a
 - Use root virtual environment commands, for example: `./venv/bin/python -m pytest -q`.
 - Generate vector figures as SVG by default.
 - `_archive_v1/` is excluded from active development and execution.
+- The pipeline intentionally uses a single MAD execution path through `venv/bin/mad.py` (no separate binary-mode integration in pipeline code).
 - The tree-building stage now prefers a natively compiled `venv/bin/FastTreeMP` built from source with OpenMP for multicore Apple Silicon execution; single-threaded FastTree is only a fallback.
 - IQ-TREE2 benchmark outputs are written to `results/iqtree_scaling.csv` and `results/iqtree_scaling_plot.svg`; the benchmark samples 500/1000/2000/4000-sequence subsets from the full alignment/tree.
 - IQ-TREE2 extrapolation plotting now marks the 24,608-sequence 0.80 threshold and saves the result to `results/iqtree_scaling_plot_extrapolated.svg`.

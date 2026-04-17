@@ -211,8 +211,8 @@ def test_cluster_tree_topologically_uses_mad_rooting_when_requested(monkeypatch,
 
     calls = []
 
-    def _mock_root_tree(input_tree, output_tree, method, mad_executable="mad.py"):
-        calls.append((input_tree, output_tree, method, mad_executable))
+    def _mock_root_tree(input_tree, output_tree, method):
+        calls.append((input_tree, output_tree, method))
         shutil.copyfile(input_tree, output_tree)
         return output_tree
 
@@ -225,7 +225,6 @@ def test_cluster_tree_topologically_uses_mad_rooting_when_requested(monkeypatch,
         rooted_tree_output=rooted_tree_out,
         min_clade_size=1,
         rooting_method="mad",
-        mad_executable="mad.py",
         group_target_min_clades=2,
         group_target_max_clades=3,
         family_target_min_clades=3,

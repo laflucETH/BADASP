@@ -181,7 +181,6 @@ def cluster_tree_topologically(
     assignments_output: Path,
     rooted_tree_output: Optional[Path] = None,
     rooting_method: str = "mad",
-    mad_executable: str = "mad.py",
     group_distance_threshold: Optional[float] = None,
     family_distance_threshold: Optional[float] = None,
     subfamily_distance_threshold: Optional[float] = None,
@@ -202,7 +201,6 @@ def cluster_tree_topologically(
         input_tree=tree_path,
         output_tree=rooted_tree_path,
         method=rooting_method,
-        mad_executable=mad_executable,
     )
 
     tree = Phylo.read(str(rooted_tree_path), "newick")
@@ -325,7 +323,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--assignments-output", default="results/topological_clustering/tree_cluster_assignments.csv")
     parser.add_argument("--rooted-tree-output", default="results/topological_clustering/mad_rooted.tree")
     parser.add_argument("--rooting-method", choices=["midpoint", "mad"], default="mad")
-    parser.add_argument("--mad-executable", default="mad.py")
     parser.add_argument("--group-distance-threshold", type=float, default=None)
     parser.add_argument("--family-distance-threshold", type=float, default=None)
     parser.add_argument("--subfamily-distance-threshold", type=float, default=None)
@@ -397,7 +394,6 @@ def main() -> None:
         assignments_output=Path(args.assignments_output),
         rooted_tree_output=Path(args.rooted_tree_output),
         rooting_method=args.rooting_method,
-        mad_executable=args.mad_executable,
         group_distance_threshold=args.group_distance_threshold,
         family_distance_threshold=args.family_distance_threshold,
         subfamily_distance_threshold=args.subfamily_distance_threshold,
