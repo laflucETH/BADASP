@@ -67,7 +67,7 @@ def test_run_sequence_clustering_invokes_cdhit_and_counts_sequences(monkeypatch,
     assert output_fasta.exists()
 
 
-def test_build_parser_defaults_identity_to_0_70() -> None:
+def test_build_parser_defaults_identity_to_0_80() -> None:
     parser = build_parser()
     args = parser.parse_args([])
-    assert args.identity == 0.7
+    assert args.identity == 0.8

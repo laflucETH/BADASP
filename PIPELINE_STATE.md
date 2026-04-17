@@ -19,7 +19,7 @@
 - Native OpenMP FastTreeMP compiled from source and installed into `venv/bin/FastTreeMP` for Apple Silicon multicore execution.
 - Verified FastTreeMP banner reports OpenMP threads and is used by the benchmark scripts when available on `PATH`.
 - Latest 0.80 scaling benchmark with native FastTreeMP: `1716.6731s` FastTree runtime (down from `3201.6729s`).
-- CD-HIT default identity threshold updated to `0.70` to reflect the current tuning point for the pipeline.
+- CD-HIT default identity threshold updated to `0.80` to reflect the current tuning point for the pipeline.
 
 ## Active Refactor Scope
 - Step 1 (state/instruction updates): completed
@@ -50,12 +50,14 @@
   - New tests: `tests/test_benchmark_iqtree.py`.
   - Report output: `results/iqtree_scaling.csv`.
   - Plot output: `results/iqtree_scaling_plot.svg`.
+  - Extrapolated plot output: `results/iqtree_scaling_plot_extrapolated.svg`.
   - Subset sizes benchmarked: 500, 1000, 2000, 4000 sequences.
   - Results:
     - 500 -> 26.0054s
     - 1000 -> 29.4324s
     - 2000 -> 32.4825s
     - 4000 -> 45.2983s
+  - Extrapolated 0.80 threshold marker at 24,608 sequences indicates a projected runtime under 10 minutes.
 - Phase 4 global ASR refactor:
   - IQ-TREE2 is now invoked once per global ASR run with `-T AUTO`.
   - The pipeline waits for the single global `.state` file before extracting hierarchical LCA sequences from the master reconstruction.

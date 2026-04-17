@@ -4,6 +4,7 @@ import random
 import shutil
 import subprocess
 import time
+from math import ceil
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
@@ -94,38 +95,57 @@ def _run_iqtree_asr(alignment_path: Path, tree_path: Path, output_prefix: Path, 
     subprocess.run(cmd, check=True)
 
 
-def _fit_scaling_curve(sequence_counts: Sequence[int], times: Sequence[float]) -> np.ndarray:
-    x = np.asarray(sequence_counts, dtype=float)
-    y = np.asarray(times, dtype=float)
-    positive_mask = (x > 0) & (y > 0)
-    x = x[positive_mask]
-    y = y[positive_mask]
-    if len(x) < 2:
-        return np.array([])
+def generate_extrapolated_scaling_plot(
+    report_csv: Path,
+    plot_svg: Path,
+    threshold_count: int = 24608,
+) -> pd.DataFrame:
+    report = pd.read_csv(report_csv)
+    if report.empty:
+        raise ValueError(f"Scaling report is empty: {report_csv}")
 
-    slope, intercept = np.polyfit(np.log10(x), np.log10(y), 1)
-    fitted_x = np.linspace(x.min(), x.max(), 200)
-    fitted_y = 10 ** (intercept + slope * np.log10(fitted_x))
-    return np.column_stack([fitted_x, fitted_y])
+    sequence_counts = report["Sequence_Count"].astype(float).to_numpy()
+    times_seconds = report["ASR_Time(s)"].astype(float).to_numpy()
 
+    fit_degree = 2 if len(sequence_counts) >= 3 else 1
+    coefficients = np.polyfit(sequence_counts, times_seconds, fit_degree)
+    x_values = np.linspace(500, 25000, 300)
+    fitted_times = np.polyval(coefficients, x_values)
+    predicted_seconds = float(np.polyval(coefficients, threshold_count))
+    predicted_minutes = predicted_seconds / 60.0
 
-def _plot_scaling_results(report: pd.DataFrame, plot_svg: Path) -> None:
     plot_svg.parent.mkdir(parents=True, exist_ok=True)
-    fitted = _fit_scaling_curve(report["Sequence_Count"].tolist(), report["ASR_Time(s)"].tolist())
-
-    fig, axis = plt.subplots(figsize=(7.0, 4.5))
-    axis.scatter(report["Sequence_Count"], report["ASR_Time(s)"], color="#4C78A8", s=60, zorder=3)
-    if fitted.size:
-        axis.plot(fitted[:, 0], fitted[:, 1], color="#C44E52", linewidth=2.0, label="Power-law fit")
-        axis.legend(frameon=False, loc="upper left")
-
+    fig, axis = plt.subplots(figsize=(7.2, 4.8))
+    axis.scatter(sequence_counts, times_seconds, color="#4C78A8", s=60, zorder=3, label="Observed runs")
+    axis.plot(x_values, fitted_times, color="#C44E52", linestyle="--", linewidth=2.0, label=f"Polyfit degree {fit_degree}")
+    axis.scatter([threshold_count], [predicted_seconds], color="#54A24B", s=90, zorder=4, label="0.80 threshold")
+    axis.axvline(threshold_count, color="#54A24B", linestyle=":", linewidth=1.5, alpha=0.85)
+    axis.annotate(
+        f"{threshold_count:,} seq\n~{predicted_minutes:.1f} min",
+        xy=(threshold_count, predicted_seconds),
+        xytext=(threshold_count * 0.82, max(times_seconds) * 1.08),
+        arrowprops={"arrowstyle": "->", "color": "#444444", "linewidth": 1.0},
+        fontsize=9,
+        bbox={"boxstyle": "round,pad=0.25", "facecolor": "white", "edgecolor": "#CCCCCC"},
+    )
+    axis.set_xlim(500, 25000)
     axis.set_xlabel("Sequence Count")
     axis.set_ylabel("Time (s)")
-    axis.set_title("IQ-TREE2 ASR Scaling")
+    axis.set_title("IQ-TREE2 ASR Scaling Extrapolation")
     axis.grid(True, alpha=0.2)
+    axis.legend(frameon=False, loc="upper left")
     fig.tight_layout()
-    fig.savefig(plot_svg, format="svg")
+    fig.savefig(
+        plot_svg,
+        format="svg",
+        metadata={
+            "Title": "IQ-TREE2 ASR Scaling Extrapolation",
+            "Description": f"threshold_count={threshold_count}; predicted_minutes={predicted_minutes:.4f}; x_range=500-25000",
+        },
+    )
     plt.close(fig)
+
+    return report
 
 
 def run_iqtree_scaling_benchmark(
@@ -165,7 +185,7 @@ def run_iqtree_scaling_benchmark(
 
     report = pd.DataFrame(rows)
     report.to_csv(report_csv, index=False)
-    _plot_scaling_results(report, plot_svg)
+    generate_extrapolated_scaling_plot(report_csv=report_csv, plot_svg=plot_svg)
     return report
 
 

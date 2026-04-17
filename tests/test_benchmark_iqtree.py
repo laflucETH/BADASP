@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.benchmark_iqtree import build_parser, build_subset_alignment_and_tree, run_iqtree_scaling_benchmark
+from src.benchmark_iqtree import (
+    build_parser,
+    build_subset_alignment_and_tree,
+    generate_extrapolated_scaling_plot,
+    run_iqtree_scaling_benchmark,
+)
 
 
 def test_build_subset_alignment_and_tree_writes_subset_files(tmp_path: Path) -> None:
@@ -87,3 +92,25 @@ def test_build_parser_defaults_subset_sizes() -> None:
     parser = build_parser()
     args = parser.parse_args([])
     assert args.subset_sizes == "500,1000,2000,4000"
+
+
+def test_generate_extrapolated_scaling_plot_reads_report_and_writes_svg(tmp_path: Path) -> None:
+    report_csv = tmp_path / "iqtree_scaling.csv"
+    plot_svg = tmp_path / "iqtree_scaling_plot_extrapolated.svg"
+
+    report_csv.write_text(
+        "Sequence_Count,ASR_Time(s)\n"
+        "500,26.0054\n"
+        "1000,29.4324\n"
+        "2000,32.4825\n"
+        "4000,45.2983\n",
+        encoding="utf-8",
+    )
+
+    generate_extrapolated_scaling_plot(report_csv=report_csv, plot_svg=plot_svg, threshold_count=24608)
+
+    assert plot_svg.exists()
+    svg_text = plot_svg.read_text(encoding="utf-8")
+    assert "24608" in svg_text
+    assert "minutes" in svg_text
+    assert "25000" in svg_text

@@ -31,7 +31,7 @@ def run_sequence_clustering(
     input_fasta: Path,
     filtered_fasta: Path,
     output_fasta: Path,
-    identity: float = 0.7,
+    identity: float = 0.8,
     word_size: int = 4,
     min_len: int = 130,
     max_len: int = 200,
@@ -66,7 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", default="data/raw/IPR019888.fasta")
     parser.add_argument("--filtered", default="data/interim/IPR019888_length_filtered.fasta")
     parser.add_argument("--output", default="data/interim/IPR019888_clustered.fasta")
-    parser.add_argument("--identity", type=float, default=0.7)
+    parser.add_argument("--identity", type=float, default=0.8)
     parser.add_argument("--word-size", type=int, default=4)
     parser.add_argument("--min-len", type=int, default=130)
     parser.add_argument("--max-len", type=int, default=200)
