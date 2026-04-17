@@ -1,0 +1,9 @@
+biopython
+numpy
+pandas
+scipy
+matplotlib
+seaborn
+joblib
+tqdm
+ete3

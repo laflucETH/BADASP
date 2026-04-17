@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from Bio import SeqIO
 
 from src.pdb_mapper import PDBMapper
 
@@ -118,14 +119,15 @@ class TestSequenceToStructureAlignment:
 
     def test_alignment_column_index_range(self):
         """
-        Verify mapping covers the expected column range (1-165 for IPR019888).
+        Verify mapping covers the current trimmed alignment column range for IPR019888.
 
         Expected:
-        - Mapping keys should span from 1 to 165 (or close to it)
+        - Mapping keys should span from 1 to the alignment length
         - No out-of-range column indices
         """
         alignment_path = Path("data/interim/IPR019888_trimmed.aln")
         pdb_id = "2cg4"
+        alignment_length = len(next(SeqIO.parse(str(alignment_path), "fasta")).seq)
 
         mapper = PDBMapper(pdb_id=pdb_id)
         mapping = mapper.map_alignment_to_structure(alignment_path=alignment_path)
@@ -134,7 +136,7 @@ class TestSequenceToStructureAlignment:
             max_col = max(mapping.keys())
             min_col = min(mapping.keys())
             assert min_col >= 1
-            assert max_col <= 165
+            assert max_col <= alignment_length
 
 
 class TestPyMOLScriptGeneration:
