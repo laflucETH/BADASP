@@ -3,12 +3,63 @@
 ## Project
 - Name: BADASP replication pipeline for IPR019888 (PF13404 track included)
 - Mode: Reproducible, modular Python workflow
-- Current date: 2026-04-10
+- Current date: 2026-04-17
+- Status: Refactor/Expansion in progress (stable Phase 7 baseline preserved)
 
 ## Architecture Snapshot
 - Active root workspace now contains a fresh Phase 1 scaffold.
 - Archived legacy work is preserved in `_archive_v1/` and was not modified.
 - Project instructions are now codified in `.github/copilot-instructions.md` with explicit phase approval stops, descriptive results directories, vector-output policy, TDD, and root-venv enforcement.
+- Refactor track enabled for optional modules without altering the validated Phase 7 baseline:
+  - Optional aligner backend selection (`mafft` default, `famsa` optional)
+  - Optional tree rooting mode selection (`midpoint` default, `mad` optional)
+  - Planned exploratory Phase 9 module for gene/species tree reconciliation outputs
+
+## Hardware Optimization Checkpoint
+- Native OpenMP FastTreeMP compiled from source and installed into `venv/bin/FastTreeMP` for Apple Silicon multicore execution.
+- Verified FastTreeMP banner reports OpenMP threads and is used by the benchmark scripts when available on `PATH`.
+- Latest 0.80 scaling benchmark with native FastTreeMP: `1716.6731s` FastTree runtime (down from `3201.6729s`).
+- CD-HIT default identity threshold updated to `0.70` to reflect the current tuning point for the pipeline.
+
+## Active Refactor Scope
+- Step 1 (state/instruction updates): completed
+- Step 2 (Phase 2 alignment refactor): completed (FAMSA2-compatible aligner flag + tests)
+- Step 3 (Phase 3 rooting refactor): completed (MAD wrapper + tree-cluster integration)
+- Step 4 (Phase 9 exploratory reconciliation): queued pending user approval
+
+## Refactor Checkpoint (2026-04-17)
+- Defaults updated:
+  - `src/msa_builder.py` now defaults to `famsa` (CLI `--aligner` default changed from `mafft` to `famsa`).
+  - `src/tree_cluster.py` now defaults to `--rooting-method mad` and default rooted tree output `results/topological_clustering/mad_rooted.tree`.
+- MAD rooting integration (TDD-first):
+  - New module: `src/tree_rooting.py` with `root_tree()` wrapper supporting `mad` and `midpoint` methods.
+  - New tests: `tests/test_tree_rooting.py`.
+  - Extended tests: `tests/test_tree_cluster.py` for MAD default parser behavior and MAD invocation path.
+- Scaling benchmark module (TDD-first):
+  - New script: `src/benchmark_scaling.py`.
+  - New tests: `tests/test_benchmark_scaling.py`.
+  - Report output: `results/scaling_benchmark_report.csv`.
+  - Benchmarked thresholds: 0.65, 0.70, 0.75, 0.80.
+  - Results:
+    - 0.65 -> 10156 reps, FAMSA 3.3361s, FastTree 1211.1243s
+    - 0.70 -> 13886 reps, FAMSA 4.7756s, FastTree 1751.6370s
+    - 0.75 -> 18420 reps, FAMSA 7.1724s, FastTree 2407.0346s
+    - 0.80 -> 24608 reps, FAMSA 11.4838s, FastTree 3201.6729s
+- IQ-TREE2 ASR scaling benchmark module (TDD-first):
+  - New script: `src/benchmark_iqtree.py`.
+  - New tests: `tests/test_benchmark_iqtree.py`.
+  - Report output: `results/iqtree_scaling.csv`.
+  - Plot output: `results/iqtree_scaling_plot.svg`.
+  - Subset sizes benchmarked: 500, 1000, 2000, 4000 sequences.
+  - Results:
+    - 500 -> 26.0054s
+    - 1000 -> 29.4324s
+    - 2000 -> 32.4825s
+    - 4000 -> 45.2983s
+- Phase 4 global ASR refactor:
+  - IQ-TREE2 is now invoked once per global ASR run with `-T AUTO`.
+  - The pipeline waits for the single global `.state` file before extracting hierarchical LCA sequences from the master reconstruction.
+  - Added `wait_for_file()` helper and regression tests for one-pass execution plus hierarchical extraction.
 
 ## Directory Layout (Phase 1)
 - `src/` : pipeline source modules
@@ -22,8 +73,33 @@
   - `results/sequence_filtering/` : sequence-length QC plots
   - `results/alignment_qc/` : alignment quality plots
   - `results/topological_clustering/` : tree-based clade outputs and dendrograms
+  - `results/badasp_scoring/` : BADASP score tables, distribution statistics, and derived plots
 
 ## Completed Work
+- Refactor kickoff (2026-04-16):
+  - Updated `.github/copilot-instructions.md` to codify optional refactor modules:
+    - FAMSA2-compatible aligner flag (`mafft`/`famsa`)
+    - MAD rooting mode flag (`midpoint`/`mad`)
+    - Exploratory Phase 9 reconciliation outputs under `results/reconciliation/`
+  - Updated `PIPELINE_STATE.md` to track refactor/expansion state while preserving stable Phase 7 baseline.
+- Implemented TDD-first Step 2 (Phase 2 aligner refactor):
+  - Tests updated first in `tests/test_msa_builder.py` (new FAMSA path, unsupported aligner guard, parser flag behavior).
+  - Observed expected red state before implementation (missing `aligner` arg and missing `build_parser`).
+  - Implemented in `src/msa_builder.py`:
+    - `build_alignment_and_trim(..., aligner="mafft")`
+    - `mafft` execution path preserved as default
+    - `famsa` execution path added (`famsa <input> <aligned_output>`)
+    - strict unsupported-aligner `ValueError`
+    - new CLI parser function `build_parser()` with `--aligner {mafft,famsa}` defaulting to `mafft`
+  - Validation:
+    - Targeted tests: `tests/test_msa_builder.py` -> `6 passed`
+    - Full suite regression check: `67 passed`
+- Implemented FastTreeMP native compile / OpenMP threading upgrade:
+  - Compiled a true OpenMP-enabled `FastTreeMP` from source using Homebrew LLVM + libomp.
+  - Installed the native binary into `venv/bin/FastTreeMP` so the pipeline resolves it before the single-threaded fallback.
+  - Reran the 0.80 benchmark and recorded `FastTree_Time(s)=1716.6731` in `results/scaling_benchmark_report_mp_080.csv`.
+  - This reduced the prior 0.80 FastTree runtime from `3201.6729s` by roughly 46%.
+- Updated CD-HIT default threshold to `0.70` so the clustering stage matches the current scaling decision.
 - Created Phase 1 scaffold directories and `.gitkeep` placeholders.
 - Hardened `.gitignore` to exclude raw/interim/processed data, results, local env/caches, and large artifacts while preserving scaffold placeholders.
 - Implemented TDD-first ingestion module:
@@ -130,6 +206,9 @@
     - `results/badasp_scoring/dendrogram_switches_subfamilies.svg`
     - `results/evolutionary_analysis/master_dendrogram_switches.svg`
   - Validation: targeted plotting tests passing (`2/2`) and all regenerated dendrogram SVGs now label the x-axis as `Branch length from root`.
+- Distribution statistics notebook support:
+  - Added `notebooks/distribution_statistics_explorer.ipynb` to render the saved per-level statistics tables and provide a reusable distribution exploration helper for `rc` and `p_ac`.
+  - Notebook loads `results/badasp_scoring/distribution_statistics_all_levels.csv` plus the per-level CSVs and can optionally enable `ipywidgets` controls when the package is available.
 - Dendrogram rotation + full coloring refinement:
   - Rotated all dendrograms by 90 degrees so branch length runs vertically and taxa/leaves run horizontally.
   - Restored hierarchy-level branch coloring for the full tree, switch, and master dendrogram outputs.

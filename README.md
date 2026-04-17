@@ -5,9 +5,9 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 
 ## Current Status
 - **Phase 1 (Architecture & Data Ingestion)**: ✓ Complete
-- **Phase 2 (Alignment & Phylogeny)**: ✓ Complete — CD-HIT, MAFFT, trimAl, FastTree
+- **Phase 2 (Alignment & Phylogeny)**: ✓ Complete — CD-HIT (default 0.70), FAMSA/MAFFT, trimAl, native OpenMP FastTreeMP
 - **Phase 3 (Topological Subfamily Clustering)**: ✓ Complete — Hierarchical tree clustering, LCA identification
-- **Phase 4 (Ancestral Sequence Reconstruction)**: ✓ Complete — IQ-TREE2 ASR for internal nodes
+- **Phase 4 (Ancestral Sequence Reconstruction)**: ✓ Complete — single-pass global IQ-TREE2 ASR with hierarchical LCA extraction
 - **Phase 5 (Restricted BADASP Scoring)**: ✓ Complete — Multilevel sister-clade scoring, SDP identification (45/45 tests passing)
 - **Phase 6 (Structural Mapping)**: ✓ Complete — PyMOL/ChimeraX script generation, sequence-to-structure alignment mapping
 - **Phase 7 (Evolutionary & Physicochemical Analysis)**: ✓ Complete — Evolutionary timeline, structural clustering, co-evolution networks, multi-level synthesis
@@ -20,9 +20,9 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 ### Phase 1-2: Sequence Ingestion & Alignment
 1. Fetch IPR019888 sequences from UniProt/InterPro (117k raw sequences).
 2. Filter sequences by domain length (130-200 AA; 110k retained).
-3. Perform CD-HIT representative clustering (5.9k clusters at 60% identity).
-4. Build MSA with MAFFT; trim columns with trimAl (`-gt 0.2`; 165 columns).
-5. Build ML phylogeny with FastTree.
+3. Perform CD-HIT representative clustering (5.9k clusters at 70% identity default for the tuned pipeline; benchmarked across 0.65-0.80).
+4. Build MSA with FAMSA by default (MAFFT remains available); trim columns with trimAl (`-gt 0.2`; 165 columns).
+5. Build ML phylogeny with native OpenMP FastTreeMP on Apple Silicon, with automatic fallback to FastTree if needed.
 
 ### Phase 3: Topological Subfamily Clustering
 6. Root tree at midpoint; convert to hierarchical linkage representation.
@@ -32,8 +32,8 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 9. Identify and extract clade Last Common Ancestors (LCAs).
 
 ### Phase 4-5: Ancestral Reconstruction & Scoring
-10. Run IQ-TREE2 ASR (`-asr`) to infer ancestral amino acid sequences at internal nodes, then parse the resulting `.state` file into per-node sequences.
-11. Map hierarchical LCA nodes from the clustering assignments onto the ASR tree and extract the corresponding ancestral sequences.
+10. Run IQ-TREE2 ASR once on the full alignment/tree (`-asr -T AUTO`) to infer ancestral amino acid sequences, then wait for the single global `.state` file and parse it into per-node sequences.
+11. Map hierarchical LCA nodes from the clustering assignments onto the ASR tree and extract the corresponding ancestral sequences from the master reconstruction.
 12. Compute restricted BADASP scores for nearest-sister clade pairs within hierarchy.
 13. Score formula: `RC - (AC * p(AC))` where RC=conservation, AC=ancestral call, p(AC)=posterior probability.
 14. Calculate 95th percentile threshold on raw pairwise scores; identify Specificity Determining Positions (SDPs).
@@ -88,3 +88,5 @@ Generated CSV outputs under `results/` are treated as local analysis artifacts a
 - Use root virtual environment commands, for example: `./venv/bin/python -m pytest -q`.
 - Generate vector figures as SVG by default.
 - `_archive_v1/` is excluded from active development and execution.
+- The tree-building stage now prefers a natively compiled `venv/bin/FastTreeMP` built from source with OpenMP for multicore Apple Silicon execution; single-threaded FastTree is only a fallback.
+- IQ-TREE2 benchmark outputs are written to `results/iqtree_scaling.csv` and `results/iqtree_scaling_plot.svg`; the benchmark samples 500/1000/2000/4000-sequence subsets from the full alignment/tree.

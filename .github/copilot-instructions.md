@@ -33,6 +33,17 @@
 - Pairwise Logic: Scores are calculated exclusively between nearest sister-clades within the same parent hierarchy, avoiding global squashing.
 - SDP Definition: Specificity Determining Positions are defined by counting threshold-exceeding switches, not by raw score averaging.
 
+## Optional Pipeline Modules (Refactor Track)
+- Alignment engine may be selected via CLI/module flag:
+  - `mafft` (default)
+  - `famsa` (FAMSA2-compatible execution path)
+- Tree rooting mode may be selected via CLI/module flag:
+  - `midpoint` (default)
+  - `mad` (Minimal Ancestral Deviation rooting wrapper)
+- Evolutionary reconciliation is an optional exploratory module:
+  - Gene/species tree reconciliation with duplication/speciation labeling
+  - Outputs should be written under `results/reconciliation/`
+
 ## The BADASP Scientific Pipeline Roadmap
 
 ### Phase 1: Architecture & Data Ingestion
@@ -77,3 +88,8 @@
 - Architectural Domain Mapping must be executed across all three hierarchy levels (Groups, Families, Subfamilies).
 - Co-evolution Network Community Extraction must be performed from coevolution matrices and exported as residue-to-community assignments.
 - Taxonomic/Species Distribution analysis must map top SDPs to major taxa and export clade-level distributions.
+
+### Phase 9: Evolutionary Reconciliation (Exploratory)
+- Add optional gene/species reconciliation workflow (separate from core grouping logic until validated).
+- Use species-aware mapping from sequence headers (TaxID/species labels), generate species tree, and reconcile against the BADASP gene tree.
+- Export duplication/speciation calls to `results/reconciliation/` plus an annotated vector tree visualization.

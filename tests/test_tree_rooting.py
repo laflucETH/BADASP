@@ -1,0 +1,69 @@
+from pathlib import Path
+
+from Bio import Phylo
+import pytest
+
+from src.tree_rooting import root_tree
+
+
+def test_root_tree_midpoint_writes_rooted_tree(tmp_path: Path) -> None:
+    input_tree = tmp_path / "input.tree"
+    output_tree = tmp_path / "rooted.tree"
+    input_tree.write_text("((A:0.1,B:0.2):0.3,(C:0.2,D:0.1):0.4);\n", encoding="utf-8")
+
+    rooted_path = root_tree(input_tree=input_tree, output_tree=output_tree, method="midpoint")
+
+    assert rooted_path == output_tree
+    assert output_tree.exists()
+    parsed = Phylo.read(str(output_tree), "newick")
+    assert parsed.root is not None
+
+
+def test_root_tree_mad_invokes_external_tool_and_uses_generated_output(monkeypatch, tmp_path: Path) -> None:
+    input_tree = tmp_path / "input.tree"
+    output_tree = tmp_path / "mad_rooted.tree"
+    mad_generated = tmp_path / "input.tree.rooted"
+    input_tree.write_text("((A:0.1,B:0.2):0.3,(C:0.2,D:0.1):0.4);\n", encoding="utf-8")
+
+    calls = []
+
+    def _mock_run(cmd, check, capture_output=False, text=False):
+        calls.append(cmd)
+        assert check is True
+        mad_generated.write_text("[&R]((A:0.1,B:0.2):0.3,(C:0.2,D:0.1):0.4);\n", encoding="utf-8")
+        return None
+
+    monkeypatch.setattr("subprocess.run", _mock_run)
+
+    rooted_path = root_tree(
+        input_tree=input_tree,
+        output_tree=output_tree,
+        method="mad",
+        mad_executable="mad.py",
+    )
+
+    assert calls
+    assert calls[0][0] == "mad.py"
+    assert calls[0][1] == str(input_tree)
+    assert rooted_path == output_tree
+    assert output_tree.exists()
+
+
+def test_root_tree_mad_raises_if_no_rooted_output_found(monkeypatch, tmp_path: Path) -> None:
+    input_tree = tmp_path / "input.tree"
+    output_tree = tmp_path / "mad_rooted.tree"
+    input_tree.write_text("((A:0.1,B:0.2):0.3,(C:0.2,D:0.1):0.4);\n", encoding="utf-8")
+
+    def _mock_run(cmd, check, capture_output=False, text=False):
+        assert check is True
+        return None
+
+    monkeypatch.setattr("subprocess.run", _mock_run)
+
+    with pytest.raises(FileNotFoundError, match="MAD rooted tree output not found"):
+        root_tree(
+            input_tree=input_tree,
+            output_tree=output_tree,
+            method="mad",
+            mad_executable="mad.py",
+        )

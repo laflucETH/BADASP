@@ -12,8 +12,10 @@ from scipy.cluster.hierarchy import fcluster
 
 try:
     from src.visualization import LEVEL_COLORS, build_terminal_color_map, plot_topological_dendrogram, plot_topological_tree_dendrogram, plot_tree_with_switches
+    from src.tree_rooting import root_tree
 except ModuleNotFoundError:
     from visualization import LEVEL_COLORS, build_terminal_color_map, plot_topological_dendrogram, plot_topological_tree_dendrogram, plot_tree_with_switches
+    from tree_rooting import root_tree
 
 
 def _compute_subtree_heights(clade: Clade) -> Dict[int, float]:
@@ -178,6 +180,8 @@ def cluster_tree_topologically(
     clusters_output: Path,
     assignments_output: Path,
     rooted_tree_output: Optional[Path] = None,
+    rooting_method: str = "mad",
+    mad_executable: str = "mad.py",
     group_distance_threshold: Optional[float] = None,
     family_distance_threshold: Optional[float] = None,
     subfamily_distance_threshold: Optional[float] = None,
@@ -190,13 +194,18 @@ def cluster_tree_topologically(
     min_clade_size: int = 5,
     dendrogram_output: Optional[Path] = None,
 ) -> Tuple[Dict[str, int], Dict[str, float]]:
-    tree = Phylo.read(str(tree_path), "newick")
-    # Midpoint-root FastTree output to avoid topology distortions from unrooted trees.
-    tree.root_at_midpoint()
+    rooted_tree_path = rooted_tree_output
+    if rooted_tree_path is None:
+        rooted_tree_path = assignments_output.parent / f"{tree_path.stem}_{rooting_method}_rooted.tree"
 
-    if rooted_tree_output is not None:
-        rooted_tree_output.parent.mkdir(parents=True, exist_ok=True)
-        Phylo.write(tree, str(rooted_tree_output), "newick")
+    rooted_tree_path = root_tree(
+        input_tree=tree_path,
+        output_tree=rooted_tree_path,
+        method=rooting_method,
+        mad_executable=mad_executable,
+    )
+
+    tree = Phylo.read(str(rooted_tree_path), "newick")
 
     labels, linkage_rows = tree_to_linkage(tree)
 
@@ -294,8 +303,7 @@ def cluster_tree_topologically(
                 writer.writerow([level_name, cluster_id, len(assignments[cluster_id]), lca_map[cluster_id]])
 
     if dendrogram_output is not None:
-        tree_for_plot = rooted_tree_output if rooted_tree_output is not None else tree_path
-        plot_topological_tree_dendrogram(tree_for_plot, dendrogram_output)
+        plot_topological_tree_dendrogram(rooted_tree_path, dendrogram_output)
 
     level_counts = {
         "group": len(group_assignments),
@@ -308,6 +316,28 @@ def cluster_tree_topologically(
         "subfamily": float(subfamily_distance_threshold),
     }
     return level_counts, level_thresholds
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Topological clustering of a phylogenetic tree.")
+    parser.add_argument("--tree", default="data/interim/IPR019888.tree")
+    parser.add_argument("--clusters-output", default="results/topological_clustering/tree_clusters.csv")
+    parser.add_argument("--assignments-output", default="results/topological_clustering/tree_cluster_assignments.csv")
+    parser.add_argument("--rooted-tree-output", default="results/topological_clustering/mad_rooted.tree")
+    parser.add_argument("--rooting-method", choices=["midpoint", "mad"], default="mad")
+    parser.add_argument("--mad-executable", default="mad.py")
+    parser.add_argument("--group-distance-threshold", type=float, default=None)
+    parser.add_argument("--family-distance-threshold", type=float, default=None)
+    parser.add_argument("--subfamily-distance-threshold", type=float, default=None)
+    parser.add_argument("--group-target-min-clades", type=int, default=5)
+    parser.add_argument("--group-target-max-clades", type=int, default=10)
+    parser.add_argument("--family-target-min-clades", type=int, default=30)
+    parser.add_argument("--family-target-max-clades", type=int, default=40)
+    parser.add_argument("--subfamily-target-min-clades", type=int, default=100)
+    parser.add_argument("--subfamily-target-max-clades", type=int, default=150)
+    parser.add_argument("--min-clade-size", type=int, default=5)
+    parser.add_argument("--dendrogram-output", default="results/topological_clustering/tree_dendrogram.svg")
+    return parser
 
 
 def write_hierarchical_tree_artifacts(
@@ -358,22 +388,7 @@ def write_hierarchical_dendrograms(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Topological clustering of a phylogenetic tree.")
-    parser.add_argument("--tree", default="data/interim/IPR019888.tree")
-    parser.add_argument("--clusters-output", default="results/topological_clustering/tree_clusters.csv")
-    parser.add_argument("--assignments-output", default="results/topological_clustering/tree_cluster_assignments.csv")
-    parser.add_argument("--rooted-tree-output", default="results/topological_clustering/midpoint_rooted.tree")
-    parser.add_argument("--group-distance-threshold", type=float, default=None)
-    parser.add_argument("--family-distance-threshold", type=float, default=None)
-    parser.add_argument("--subfamily-distance-threshold", type=float, default=None)
-    parser.add_argument("--group-target-min-clades", type=int, default=5)
-    parser.add_argument("--group-target-max-clades", type=int, default=10)
-    parser.add_argument("--family-target-min-clades", type=int, default=30)
-    parser.add_argument("--family-target-max-clades", type=int, default=40)
-    parser.add_argument("--subfamily-target-min-clades", type=int, default=100)
-    parser.add_argument("--subfamily-target-max-clades", type=int, default=150)
-    parser.add_argument("--min-clade-size", type=int, default=5)
-    parser.add_argument("--dendrogram-output", default="results/topological_clustering/tree_dendrogram.svg")
+    parser = build_parser()
     args = parser.parse_args()
 
     level_counts, level_thresholds = cluster_tree_topologically(
@@ -381,6 +396,8 @@ def main() -> None:
         clusters_output=Path(args.clusters_output),
         assignments_output=Path(args.assignments_output),
         rooted_tree_output=Path(args.rooted_tree_output),
+        rooting_method=args.rooting_method,
+        mad_executable=args.mad_executable,
         group_distance_threshold=args.group_distance_threshold,
         family_distance_threshold=args.family_distance_threshold,
         subfamily_distance_threshold=args.subfamily_distance_threshold,

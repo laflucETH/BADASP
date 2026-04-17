@@ -19,13 +19,20 @@ def build_alignment_and_trim(
     aligned_output: Path,
     trimmed_output: Path,
     gap_threshold: float = 0.2,
+    aligner: str = "famsa",
 ) -> int:
     aligned_output.parent.mkdir(parents=True, exist_ok=True)
     trimmed_output.parent.mkdir(parents=True, exist_ok=True)
 
-    mafft_cmd = ["mafft", "--auto", str(input_fasta)]
-    with aligned_output.open("w", encoding="utf-8") as handle:
-        subprocess.run(mafft_cmd, check=True, stdout=handle)
+    if aligner == "mafft":
+        mafft_cmd = ["mafft", "--auto", str(input_fasta)]
+        with aligned_output.open("w", encoding="utf-8") as handle:
+            subprocess.run(mafft_cmd, check=True, stdout=handle)
+    elif aligner == "famsa":
+        famsa_cmd = ["famsa", str(input_fasta), str(aligned_output)]
+        subprocess.run(famsa_cmd, check=True)
+    else:
+        raise ValueError(f"Unsupported aligner: {aligner}. Expected one of: mafft, famsa")
 
     trimal_cmd = [
         "trimal",
@@ -41,12 +48,18 @@ def build_alignment_and_trim(
     return _alignment_column_count(trimmed_output)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Align clustered FASTA with MAFFT and trim with trimAl.")
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Align clustered FASTA with MAFFT or FAMSA and trim with trimAl.")
     parser.add_argument("--input", default="data/interim/IPR019888_clustered.fasta")
     parser.add_argument("--aligned", default="data/interim/IPR019888_aligned.aln")
     parser.add_argument("--output", default="data/interim/IPR019888_trimmed.aln")
     parser.add_argument("--gap-threshold", type=float, default=0.2)
+    parser.add_argument("--aligner", choices=["mafft", "famsa"], default="famsa")
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
 
     trimmed_cols = build_alignment_and_trim(
@@ -54,6 +67,7 @@ def main() -> None:
         aligned_output=Path(args.aligned),
         trimmed_output=Path(args.output),
         gap_threshold=args.gap_threshold,
+        aligner=args.aligner,
     )
     print(f"Trimmed alignment columns: {trimmed_cols}")
 

@@ -7,7 +7,7 @@ from Bio import Phylo
 import pytest
 from scipy.cluster.hierarchy import fcluster, linkage
 
-from src.tree_cluster import choose_distance_threshold, cluster_tree_topologically
+from src.tree_cluster import build_parser, choose_distance_threshold, cluster_tree_topologically
 
 
 def test_choose_distance_threshold_targets_reasonable_clade_range() -> None:
@@ -44,6 +44,7 @@ def test_cluster_tree_topologically_writes_multilevel_assignments(tmp_path: Path
         assignments_output=assignments_csv,
         min_clade_size=1,
         rooted_tree_output=rooted_tree_out,
+        rooting_method="midpoint",
         group_target_min_clades=2,
         group_target_max_clades=3,
         family_target_min_clades=3,
@@ -102,6 +103,7 @@ def test_cluster_tree_topologically_filters_small_clades(tmp_path: Path) -> None
             clusters_output=clusters_csv,
             assignments_output=assignments_csv,
             min_clade_size=5,
+            rooting_method="midpoint",
             group_target_min_clades=2,
             group_target_max_clades=2,
             family_target_min_clades=3,
@@ -174,6 +176,7 @@ def test_cluster_tree_topologically_keeps_group_members_even_if_family_filtered(
         clusters_output=clusters_csv,
         assignments_output=assignments_csv,
         min_clade_size=2,
+        rooting_method="midpoint",
         group_distance_threshold=1.0,
         family_distance_threshold=0.3,
         subfamily_distance_threshold=0.02,
@@ -187,3 +190,51 @@ def test_cluster_tree_topologically_keeps_group_members_even_if_family_filtered(
     assert pd.notna(by_seq.loc["F", "group_id"])
     assert pd.isna(by_seq.loc["C", "family_id"])
     assert pd.isna(by_seq.loc["F", "family_id"])
+
+
+def test_build_parser_defaults_rooting_method_to_mad() -> None:
+    parser = build_parser()
+    args = parser.parse_args([])
+    assert args.rooting_method == "mad"
+
+
+def test_cluster_tree_topologically_uses_mad_rooting_when_requested(monkeypatch, tmp_path: Path) -> None:
+    tree_path = tmp_path / "toy.tree"
+    clusters_csv = tmp_path / "tree_clusters.csv"
+    assignments_csv = tmp_path / "tree_cluster_assignments.csv"
+    rooted_tree_out = tmp_path / "mad_rooted.tree"
+
+    tree_path.write_text(
+        "(((A:0.05,B:0.05):0.2,(C:0.05,D:0.05):0.2):0.4,((E:0.05,F:0.05):0.2,(G:0.05,H:0.05):0.2):0.4);\n",
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    def _mock_root_tree(input_tree, output_tree, method, mad_executable="mad.py"):
+        calls.append((input_tree, output_tree, method, mad_executable))
+        shutil.copyfile(input_tree, output_tree)
+        return output_tree
+
+    monkeypatch.setattr("src.tree_cluster.root_tree", _mock_root_tree)
+
+    level_counts, _ = cluster_tree_topologically(
+        tree_path=tree_path,
+        clusters_output=clusters_csv,
+        assignments_output=assignments_csv,
+        rooted_tree_output=rooted_tree_out,
+        min_clade_size=1,
+        rooting_method="mad",
+        mad_executable="mad.py",
+        group_target_min_clades=2,
+        group_target_max_clades=3,
+        family_target_min_clades=3,
+        family_target_max_clades=5,
+        subfamily_target_min_clades=4,
+        subfamily_target_max_clades=8,
+    )
+
+    assert calls
+    assert calls[0][2] == "mad"
+    assert rooted_tree_out.exists()
+    assert level_counts["group"] > 0

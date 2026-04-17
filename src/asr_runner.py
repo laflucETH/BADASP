@@ -1,6 +1,7 @@
 import argparse
 import csv
 import subprocess
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
@@ -28,12 +29,21 @@ def run_iqtree_asr(
         "-m",
         model,
         "-asr",
-        "-nt",
+        "-T",
         str(threads),
         "--prefix",
         str(output_prefix),
     ]
     subprocess.run(cmd, check=True)
+
+
+def wait_for_file(file_path: Path, timeout_seconds: int = 300, poll_interval: float = 1.0) -> Path:
+    deadline = time.time() + timeout_seconds
+    while time.time() <= deadline:
+        if file_path.exists():
+            return file_path
+        time.sleep(poll_interval)
+    raise TimeoutError(f"Timed out waiting for file: {file_path}")
 
 
 def parse_iqtree_state_sequences(state_file: Path) -> Dict[str, str]:
@@ -194,6 +204,8 @@ def run_asr_pipeline(
             output_prefix=output_prefix,
             iqtree_binary=iqtree_binary,
         )
+
+    wait_for_file(state_file)
 
     node_sequences = parse_iqtree_state_sequences(state_file)
 

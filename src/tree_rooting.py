@@ -1,0 +1,49 @@
+import shutil
+import subprocess
+from pathlib import Path
+
+from Bio import Phylo
+
+
+def root_tree(
+    input_tree: Path,
+    output_tree: Path,
+    method: str = "mad",
+    mad_executable: str = "mad.py",
+) -> Path:
+    output_tree.parent.mkdir(parents=True, exist_ok=True)
+
+    if method == "midpoint":
+        tree = Phylo.read(str(input_tree), "newick")
+        tree.root_at_midpoint()
+        Phylo.write(tree, str(output_tree), "newick")
+        return output_tree
+
+    if method != "mad":
+        raise ValueError(f"Unsupported rooting method: {method}. Expected one of: mad, midpoint")
+
+    result = subprocess.run(
+        [mad_executable, str(input_tree)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    rooted_candidates = [
+        input_tree.parent / f"{input_tree.name}.rooted",
+        input_tree.with_suffix(f"{input_tree.suffix}.rooted"),
+        input_tree.with_name(f"{input_tree.stem}.rooted"),
+    ]
+    for candidate in rooted_candidates:
+        if candidate.exists():
+            shutil.copyfile(candidate, output_tree)
+            return output_tree
+
+    stdout = "" if result is None else (result.stdout or "")
+    if stdout and "(" in stdout:
+        output_tree.write_text(stdout.strip() + "\n", encoding="utf-8")
+        return output_tree
+
+    raise FileNotFoundError(
+        "MAD rooted tree output not found. Expected a '.rooted' file or Newick on stdout."
+    )
