@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from Bio import AlignIO, Phylo, SeqIO
 from Bio.Phylo.BaseTree import Clade, Tree
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +250,7 @@ def _nearest_sister_pairs_for_level(
     pairs = set()
     cluster_ids = sorted(int(cid) for cid in members_by_cluster.keys())
 
-    for cluster_id in cluster_ids:
+    for cluster_id in tqdm(cluster_ids, desc=f"Pairing {level}s", unit="cluster"):
         parent_value = cluster_to_parent[cluster_id]
         candidates = [
             other_id
@@ -302,7 +303,7 @@ def _compute_level_scores(
     level_grouped = assignments.groupby(id_col)
     level_sequences: Dict[int, List[str]] = {}
     level_lcas: Dict[int, str] = {}
-    for cluster_id, frame in level_grouped:
+    for cluster_id, frame in tqdm(level_grouped, total=level_grouped.ngroups, desc=f"Preparing {level} clusters", unit="cluster"):
         seq_ids = frame["sequence_id"].tolist()
         level_sequences[int(cluster_id)] = [seq_dict[sid] for sid in seq_ids if sid in seq_dict]
         raw_lca = str(frame.iloc[0][lca_col]).strip()
@@ -311,7 +312,7 @@ def _compute_level_scores(
         level_lcas[int(cluster_id)] = resolved_lca_nodes[raw_lca]
 
     pairwise_scores: List[Dict[str, object]] = []
-    for cluster_a, cluster_b in pairs:
+    for cluster_a, cluster_b in tqdm(pairs, desc=f"Scoring {level} sister pairs", unit="pair"):
         if cluster_a not in level_sequences or cluster_b not in level_sequences:
             continue
         lca_a = level_lcas[cluster_a]

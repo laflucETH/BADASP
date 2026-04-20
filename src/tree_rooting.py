@@ -40,7 +40,7 @@ def root_tree(
     result = subprocess.run(
         [str(mad_script), str(input_tree)],
         check=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
         text=True,
     )
 

@@ -27,7 +27,7 @@ def test_root_tree_mad_invokes_external_tool_and_uses_generated_output(monkeypat
 
     calls = []
 
-    def _mock_run(cmd, check, capture_output=False, text=False):
+    def _mock_run(cmd, check, capture_output=False, text=False, **kwargs):
         calls.append(cmd)
         assert check is True
         mad_generated.write_text("[&R]((A:0.1,B:0.2):0.3,(C:0.2,D:0.1):0.4);\n", encoding="utf-8")
@@ -61,7 +61,7 @@ def test_root_tree_mad_raises_if_no_rooted_output_found(monkeypatch, tmp_path: P
     mad_exec.write_text("#!/usr/bin/env python\n", encoding="utf-8")
     monkeypatch.setattr("src.tree_rooting.CANONICAL_MAD_EXECUTABLE", mad_exec)
 
-    def _mock_run(cmd, check, capture_output=False, text=False):
+    def _mock_run(cmd, check, capture_output=False, text=False, **kwargs):
         assert check is True
         return None
 

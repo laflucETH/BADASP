@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 from Bio import SeqIO
+from tqdm import tqdm
 
 
 def count_fasta_records(fasta_path: Path) -> int:
@@ -19,7 +20,8 @@ def filter_fasta_by_length(
 
     kept = 0
     with output_fasta.open("w", encoding="utf-8") as handle:
-        for record in SeqIO.parse(str(input_fasta), "fasta"):
+        records = SeqIO.parse(str(input_fasta), "fasta")
+        for record in tqdm(records, desc="Length filtering", unit="seq"):
             seq_len = len(record.seq)
             if min_len <= seq_len <= max_len:
                 SeqIO.write(record, handle, "fasta")

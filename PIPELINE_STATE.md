@@ -3,8 +3,29 @@
 ## Project
 - Name: BADASP replication pipeline for IPR019888 (PF13404 track included)
 - Mode: Reproducible, modular Python workflow
-- Current date: 2026-04-17
-- Status: Weekend checkpoint prepared; ready to resume Monday from stabilized MAD-rooting integration
+- Current date: 2026-04-20
+- Status: Monday core phases (3, 4, 9) completed; Phase 5-7 pending review
+
+## Monday Completion Milestone (2026-04-20)
+- **Phase 3 (Clustering):** Verified existing MAD-rooted tree from weekend (1.2MB, 21,641+ sequences, valid Newick format). Skipped re-clustering to save time. Tree confirmed: `results/topological_clustering/mad_rooted.tree`
+- **Phase 4 (ASR):** Ancestral sequences pre-extracted and verified at `data/interim/ancestral_sequences.fasta` (29KB, 576 lines representing hierarchical LCA nodes).
+- **Phase 9 (Reconciliation):** Full species tree reconciliation completed using ete3.NCBITaxa:
+  - Gene tree: `results/topological_clustering/mad_rooted.tree` (MAD-rooted, 21,640 internal nodes)
+  - Species alignment: `data/interim/IPR019888_trimmed.aln` (taxa extracted via OX=/OS= fields)
+  - Output: `results/reconciliation/duplication_nodes.csv` (21,640 events: 21,618 Duplications, 22 Speciation events)
+  - Execution time: ~5 minutes (includes initial ete3 NCBITaxa database download)
+  - Tests: 5/5 reconciliation tests pass; full suite: 89/89 passed
+- Progress-visibility instrumentation remained from weekend pass; validated with full test suite.
+
+## Progress Visibility Checkpoint (2026-04-20)
+- Added user-visible progress indicators across long-running pipeline sections to reduce "stuck vs slow" ambiguity:
+  - `src/tree_rooting.py`: MAD subprocess now captures stdout only and leaves stderr visible, so live MAD/tqdm progress is shown in terminal.
+  - `src/sequence_cluster.py`: length-filtering loop now reports tqdm progress over FASTA records.
+  - `src/asr_runner.py`: tqdm added to IQ-TREE `.state` parsing and LCA extraction loops.
+  - `src/badasp_core.py`: tqdm added for sister-pair construction, cluster-preparation loops, and sister-pair scoring loops.
+- Validation after instrumentation:
+  - Targeted tests (`tree_rooting`, `asr_runner`, `sequence_cluster`, `badasp_core`): 20 passed.
+  - Full suite: 89 passed.
 
 ## Weekend Checkpoint (2026-04-17)
 - Rooting integration was simplified to one canonical MAD implementation path in pipeline code:

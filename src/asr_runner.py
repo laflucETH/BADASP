@@ -9,6 +9,7 @@ from typing import Dict, List
 from Bio import Phylo, SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+from tqdm import tqdm
 
 
 def run_iqtree_asr(
@@ -53,7 +54,7 @@ def parse_iqtree_state_sequences(state_file: Path) -> Dict[str, str]:
     per_node_sites: Dict[str, Dict[int, str]] = defaultdict(dict)
     with state_file.open("r", encoding="utf-8") as handle:
         header_found = False
-        for raw in handle:
+        for raw in tqdm(handle, desc="Parsing IQ-TREE .state", unit="line"):
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
@@ -132,7 +133,7 @@ def extract_lca_ancestral_sequences(
     if hierarchical_nodes:
         tree = Phylo.read(str(tree_path), "newick")
         seen_nodes = set()
-        for node_id in sorted(hierarchical_nodes):
+        for node_id in tqdm(sorted(hierarchical_nodes), desc="Extracting hierarchical LCAs", unit="node"):
             members = hierarchical_nodes[node_id]
             lca_node = tree.common_ancestor(members)
             resolved_node_id = lca_node.name
@@ -156,7 +157,7 @@ def extract_lca_ancestral_sequences(
         clades = _read_clade_members(assignments_csv)
         seen_nodes = set()
 
-        for clade_id, members in sorted(clades.items()):
+        for clade_id, members in tqdm(sorted(clades.items()), desc="Extracting legacy clade LCAs", unit="clade"):
             if len(members) < min_clade_size:
                 continue
 
