@@ -1,0 +1,30 @@
+# BADASP Phase 7 physicochemical structural mapping
+open /Users/lucla/Desktop/repos/BADASP/data/raw/2cg4.pdb
+set bgColor white
+lighting soft
+lighting shadows false
+lighting depthCue false
+graphics silhouettes true color black width 4
+material dull
+show cartoon
+hide atoms
+color protein gainsboro
+color :22 #2CA02C
+color :37 #D62728
+color :39 #2CA02C
+color :41 #9467BD
+color :45 #D62728
+color :61 #D62728
+color :102 #2CA02C
+color :107 #9467BD
+color :120 #2CA02C
+color :128 #2CA02C
+show :22,37,39,41,45,61,102,107,120,128 atoms
+style :22,37,39,41,45,61,102,107,120,128 stick
+size stickRadius 0.28
+size atomRadius 1.05
+# legend
+# charge_shift: #D62728
+# hydrophobicity_shift: #2CA02C
+# size_shift: #1F77B4
+# multiple_complex: #9467BD
