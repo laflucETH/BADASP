@@ -13,6 +13,9 @@ from src.badasp_core import (
     compute_multilevel_badasp_scores,
     identify_sdps,
     load_state_file,
+    load_reconciliation_events,
+    _filter_pairs_by_reconciliation,
+    _resolve_hierarchical_lca_nodes,
 )
 
 
@@ -107,10 +110,66 @@ def sample_state_file(temp_data_dir):
     return state_path
 
 
+@pytest.fixture
+def sample_reconciliation_csv(temp_data_dir):
+    reconciliation_path = temp_data_dir / "duplication_nodes.csv"
+    pd.DataFrame(
+        {
+            "node_name": ["G1", "G2", "F10", "F20", "S100", "S110", "S200", "S210"],
+            "event_type": ["Speciation", "Duplication", "Duplication", "Duplication", "Duplication", "Speciation", "Duplication", "Duplication"],
+        }
+    ).to_csv(reconciliation_path, index=False)
+    return reconciliation_path
+
+
 def test_load_state_file_parses_correctly(sample_state_file):
     state_data = load_state_file(sample_state_file)
     assert "G1" in state_data
     assert "G2" in state_data
+
+
+def test_load_reconciliation_events_parses_csv(sample_reconciliation_csv):
+    events = load_reconciliation_events(sample_reconciliation_csv)
+    assert events["G1"] == "Speciation"
+    assert events["G2"] == "Duplication"
+    assert events["S110"] == "Speciation"
+
+
+def test_filter_pairs_by_reconciliation_skips_speciation_pairs(sample_reconciliation_csv):
+    events = load_reconciliation_events(sample_reconciliation_csv)
+    pairs = [(1, 2), (3, 4)]
+    level_lcas = {1: "G1", 2: "G2", 3: "F10", 4: "F20"}
+
+    kept_pairs, skipped_pairs, skipped_speciation_pairs = _filter_pairs_by_reconciliation(
+        pairs=pairs,
+        level_lcas=level_lcas,
+        reconciliation_events=events,
+    )
+
+    assert kept_pairs == [(3, 4)]
+    assert skipped_pairs == 1
+    assert skipped_speciation_pairs == 1
+
+
+def test_resolve_hierarchical_lca_nodes_ignores_missing_tree_members(temp_data_dir):
+    tree_path = temp_data_dir / "tiny.tree"
+    tree_path.write_text("((A:0.1,B:0.1)Node1:0.2,C:0.3)Root;", encoding="utf-8")
+
+    assignments = pd.DataFrame(
+        {
+            "sequence_id": ["A", "B", "Missing"],
+            "group_lca_node": ["G1", "G1", "G1"],
+            "family_lca_node": ["F1", "F1", "F1"],
+        }
+    )
+
+    from Bio import Phylo
+
+    tree = Phylo.read(tree_path, "newick")
+    resolved = _resolve_hierarchical_lca_nodes(assignments, tree)
+
+    assert resolved["G1"] == "Node1"
+    assert resolved["F1"] == "Node1"
 
 
 def test_calculate_ancestral_conservation_binary():
@@ -187,6 +246,30 @@ def test_compute_multilevel_badasp_scores_structure(
         df = results[level]["scores"]
         assert set(df.columns) >= {"position", "max_score", "switch_count", "global_threshold", "badasp_score"}
         assert len(df) == 4
+
+
+def test_compute_multilevel_badasp_scores_filters_speciation_pairs(
+    sample_alignment,
+    sample_assignments,
+    sample_ancestral_sequences,
+    sample_state_file,
+    sample_tree,
+    sample_reconciliation_csv,
+):
+    results = compute_multilevel_badasp_scores(
+        alignment_path=sample_alignment,
+        assignments_path=sample_assignments,
+        ancestral_path=sample_ancestral_sequences,
+        state_path=sample_state_file,
+        tree_path=sample_tree,
+        reconciliation_csv=sample_reconciliation_csv,
+        min_clade_size=1,
+    )
+
+    assert results["families"]["filtered_speciation_pairs"] == 1
+    assert not results["families"]["pairwise"].empty
+    assert results["groups"]["filtered_speciation_pairs"] >= 0
+    assert results["subfamilies"]["filtered_speciation_pairs"] >= 0
 
 
 def test_identify_sdps_prefers_switch_count():

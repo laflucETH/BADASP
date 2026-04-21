@@ -1,0 +1,12 @@
+# BADASP Phase 6 structural mapping: Families
+open /Users/lucla/Desktop/repos/BADASP/data/raw/2cg4.pdb
+set bgColor white
+lighting soft
+lighting shadows false
+lighting depthCue false
+graphics silhouettes true color black width 4
+material dull
+show cartoon
+hide atoms
+color protein gainsboro
+# families_residues: none

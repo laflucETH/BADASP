@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import logging
 from collections import defaultdict
@@ -151,6 +152,58 @@ def load_state_file(state_path: Path) -> Dict[str, pd.DataFrame]:
     return {node: pd.DataFrame(rows) for node, rows in state_data.items()}
 
 
+def load_reconciliation_events(reconciliation_csv: Optional[Path]) -> Dict[str, str]:
+    if reconciliation_csv is None:
+        return {}
+
+    reconciliation_csv = Path(reconciliation_csv)
+    if not reconciliation_csv.exists():
+        raise FileNotFoundError(f"Reconciliation CSV not found: {reconciliation_csv}")
+
+    reconciliation_df = pd.read_csv(reconciliation_csv)
+    required_columns = {"node_name", "event_type"}
+    missing = required_columns - set(reconciliation_df.columns)
+    if missing:
+        raise ValueError(f"Reconciliation CSV is missing required columns: {sorted(missing)}")
+
+    events: Dict[str, str] = {}
+    for _, row in reconciliation_df.iterrows():
+        node_name = row["node_name"]
+        event_type = row["event_type"]
+        if pd.isna(node_name) or pd.isna(event_type):
+            continue
+        node_label = str(node_name).strip()
+        event_label = str(event_type).strip()
+        if node_label:
+            events[node_label] = event_label
+    return events
+
+
+def _filter_pairs_by_reconciliation(
+    pairs: List[Tuple[int, int]],
+    level_lcas: Dict[int, str],
+    reconciliation_events: Dict[str, str],
+) -> Tuple[List[Tuple[int, int]], int, int]:
+    if not reconciliation_events:
+        return pairs, 0, 0
+
+    kept_pairs: List[Tuple[int, int]] = []
+    skipped_pairs = 0
+    skipped_speciation_pairs = 0
+    for cluster_a, cluster_b in pairs:
+        lca_a = level_lcas[cluster_a]
+        lca_b = level_lcas[cluster_b]
+        event_a = reconciliation_events.get(lca_a, "Duplication")
+        event_b = reconciliation_events.get(lca_b, "Duplication")
+        if event_a != "Duplication" or event_b != "Duplication":
+            skipped_pairs += 1
+            if event_a == "Speciation" or event_b == "Speciation":
+                skipped_speciation_pairs += 1
+            continue
+        kept_pairs.append((cluster_a, cluster_b))
+    return kept_pairs, skipped_pairs, skipped_speciation_pairs
+
+
 def parse_clade_assignments(assignments_path: Path) -> pd.DataFrame:
     return pd.read_csv(assignments_path)
 
@@ -209,6 +262,7 @@ def _resolve_hierarchical_lca_nodes(assignments: pd.DataFrame, tree: Tree) -> Di
     if not lca_columns:
         return {}
 
+    terminal_names = {terminal.name for terminal in tree.get_terminals() if terminal.name}
     node_members: Dict[str, List[str]] = defaultdict(list)
     for _, row in assignments.iterrows():
         sequence_id = str(row["sequence_id"])
@@ -222,7 +276,10 @@ def _resolve_hierarchical_lca_nodes(assignments: pd.DataFrame, tree: Tree) -> Di
 
     resolved: Dict[str, str] = {}
     for label, members in node_members.items():
-        lca_node = tree.common_ancestor(members)
+        present_members = [member for member in members if member in terminal_names]
+        if not present_members:
+            raise ValueError(f"No members for {label} were found in the ASR tree.")
+        lca_node = tree.common_ancestor(present_members)
         if not lca_node.name:
             raise ValueError(f"LCA node for {label} has no node name in ASR tree.")
         resolved[label] = lca_node.name
@@ -295,7 +352,9 @@ def _compute_level_scores(
     state_data: Dict[str, pd.DataFrame],
     pairs: List[Tuple[int, int]],
     resolved_lca_nodes: Dict[str, str],
+    reconciliation_events: Optional[Dict[str, str]] = None,
 ) -> Dict[str, pd.DataFrame]:
+    pairwise_columns = ["level", "pair", "position", "rc", "ac", "p_ac", "score"]
     id_col, lca_col = _level_columns(assignments, level)
     seq_dict = {record.id: str(record.seq) for record in alignment}
     aln_length = alignment.get_alignment_length()
@@ -311,8 +370,14 @@ def _compute_level_scores(
             raise KeyError(f"No resolved ASR node found for {raw_lca}.")
         level_lcas[int(cluster_id)] = resolved_lca_nodes[raw_lca]
 
+    filtered_pairs, skipped_pairs, skipped_speciation_pairs = _filter_pairs_by_reconciliation(
+        pairs=pairs,
+        level_lcas=level_lcas,
+        reconciliation_events=reconciliation_events or {},
+    )
+
     pairwise_scores: List[Dict[str, object]] = []
-    for cluster_a, cluster_b in tqdm(pairs, desc=f"Scoring {level} sister pairs", unit="pair"):
+    for cluster_a, cluster_b in tqdm(filtered_pairs, desc=f"Scoring {level} sister pairs", unit="pair"):
         if cluster_a not in level_sequences or cluster_b not in level_sequences:
             continue
         lca_a = level_lcas[cluster_a]
@@ -373,13 +438,17 @@ def _compute_level_scores(
             f"[{level.upper()}] Max Pos: Pos={max_entry['position']}, RC={max_entry['rc']:.6f}, AC={max_entry['ac']:.6f}, p={max_entry['p_ac']:.6f}, Score={max_entry['score']:.6f}"
         )
         print(f"[{level.upper()}] Global pooled threshold (95th percentile): {global_threshold:.6f}")
+    if skipped_speciation_pairs:
+        print(f"[{level.upper()}] Filtered {skipped_speciation_pairs} sister pairs marked as Speciation in reconciliation data.")
 
     return {
-        "pairwise": pd.DataFrame(pairwise_scores),
+        "pairwise": pd.DataFrame(pairwise_scores, columns=pairwise_columns),
         "scores": score_df,
         "sdps": sdp_df,
         "threshold": threshold,
-        "pairs": pairs,
+        "pairs": filtered_pairs,
+        "filtered_pairs": skipped_pairs,
+        "filtered_speciation_pairs": skipped_speciation_pairs,
     }
 
 
@@ -390,12 +459,14 @@ def compute_multilevel_badasp_scores(
     state_path: Path,
     tree_path: Path,
     min_clade_size: int = 5,
+    reconciliation_csv: Optional[Path] = None,
 ) -> Dict[str, Dict[str, object]]:
     alignment = AlignIO.read(alignment_path, "fasta")
     assignments = pd.read_csv(assignments_path)
     ancestral_seqs = {rec.id: str(rec.seq) for rec in SeqIO.parse(ancestral_path, "fasta")}
     state_data = load_state_file(state_path)
     topology_tree = Phylo.read(str(tree_path), "newick")
+    reconciliation_events = load_reconciliation_events(reconciliation_csv)
 
     asr_tree = topology_tree
     asr_tree_path = Path(state_path).with_suffix(".treefile")
@@ -449,6 +520,7 @@ def compute_multilevel_badasp_scores(
             state_data=state_data,
             pairs=hierarchical_pairs[level],
             resolved_lca_nodes=resolved_lca_nodes,
+            reconciliation_events=reconciliation_events,
         )
         results[level] = result
 
@@ -478,6 +550,7 @@ class BADASPCore:
         state_path: Path,
         tree_path: Path,
         min_clade_size: int = 5,
+        reconciliation_csv: Optional[Path] = None,
     ):
         self.alignment_path = Path(alignment_path)
         self.assignments_path = Path(assignments_path)
@@ -485,6 +558,7 @@ class BADASPCore:
         self.state_path = Path(state_path)
         self.tree_path = Path(tree_path)
         self.min_clade_size = min_clade_size
+        self.reconciliation_csv = Path(reconciliation_csv) if reconciliation_csv is not None else None
         self.results = None
         self.sdps = None
         self.thresholds = None
@@ -497,6 +571,7 @@ class BADASPCore:
             state_path=self.state_path,
             tree_path=self.tree_path,
             min_clade_size=self.min_clade_size,
+            reconciliation_csv=self.reconciliation_csv,
         )
         logger.info("BADASP multilevel scores computed")
         return self.results
@@ -522,3 +597,41 @@ class BADASPCore:
                 payload["sdps"].to_csv(sdp_path, index=False)
             pairwise_path = output_dir / f"raw_pairwise_{level}.csv"
             payload["pairwise"].to_csv(pairwise_path, index=False)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Phase 5 multi-level BADASP scoring")
+    parser.add_argument("--alignment", default="data/interim/IPR019888_trimmed.aln")
+    parser.add_argument("--assignments", default="results/topological_clustering/tree_cluster_assignments.csv")
+    parser.add_argument("--ancestral", default="data/interim/ancestral_sequences.fasta")
+    parser.add_argument("--state", default="data/interim/asr_run.state")
+    parser.add_argument("--tree", default="results/topological_clustering/mad_rooted.tree")
+    parser.add_argument("--min-clade-size", type=int, default=5)
+    parser.add_argument("--output-dir", default="results/badasp_scoring")
+    parser.add_argument("--reconciliation-csv", default=None)
+    return parser
+
+
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    args = build_parser().parse_args(argv)
+    core = BADASPCore(
+        alignment_path=Path(args.alignment),
+        assignments_path=Path(args.assignments),
+        ancestral_path=Path(args.ancestral),
+        state_path=Path(args.state),
+        tree_path=Path(args.tree),
+        min_clade_size=args.min_clade_size,
+        reconciliation_csv=Path(args.reconciliation_csv) if args.reconciliation_csv else None,
+    )
+    core.compute_scores()
+    core.identify_sdps()
+    core.save_results(Path(args.output_dir))
+
+    if core.results is not None:
+        filtered_total = sum(int(payload.get("filtered_speciation_pairs", 0)) for payload in core.results.values())
+        total_pairs = sum(len(payload.get("pairs", [])) + int(payload.get("filtered_pairs", 0)) for payload in core.results.values())
+        print(f"Filtered {filtered_total} sister pairs marked as Speciation out of {total_pairs} candidate pairs.")
+
+
+if __name__ == "__main__":
+    main()

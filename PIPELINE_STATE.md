@@ -374,6 +374,20 @@
   - Score: `RC - (AC * p(AC))`
   - Thresholding: pooled 95th percentile threshold per hierarchy level
   - SDP selection: highest switch-count positions per level
+- Reconciliation-aware restriction (2026-04-20):
+  - Added optional `--reconciliation-csv` support to `src/badasp_core.py` so Phase 5 can skip sister-pair scoring when the corresponding LCA node is labeled `Speciation` in `results/reconciliation/duplication_nodes.csv`.
+  - Added robust handling for ASR trees missing some assignment members; unresolved leaf names are ignored when at least one member is present in the tree.
+  - Validation: Phase 5 regression tests now cover reconciliation parsing, pair filtering, and missing-leaf tolerance (`tests/test_badasp_core.py` 11/11 passing after update).
+- Restricted Phase 5 rerun output (duplication-only filtering enabled):
+  - Command: `src/badasp_core.py --reconciliation-csv results/reconciliation/duplication_nodes.csv`
+  - Reported filtered sister pairs: 0 Speciation pairs removed from 103 candidate pairs (all surviving sister pairs mapped to Duplication LCAs in the current topology)
+  - Updated outputs written at 2026-04-20 15:35:
+    - `results/badasp_scoring/badasp_scores_groups.csv`
+    - `results/badasp_scoring/badasp_scores_families.csv`
+    - `results/badasp_scoring/badasp_scores_subfamilies.csv`
+    - `results/badasp_scoring/raw_pairwise_groups.csv`
+    - `results/badasp_scoring/raw_pairwise_families.csv`
+    - `results/badasp_scoring/raw_pairwise_subfamilies.csv`
 - Outputs written by the refactor:
   - `results/badasp_scoring/badasp_scores_groups.csv`
   - `results/badasp_scoring/badasp_scores_families.csv`
@@ -439,6 +453,9 @@
 - CLI execution status:
   - Command run: `python -m src.pdb_mapper --pdb-id 2cg4 --alignment data/interim/IPR019888_trimmed.aln --scores-dir results/badasp_scoring --output-cxc results/structural_mapping/highlight_sdps.cxc`
   - Confirmation: `Generated ChimeraX scripts: results/structural_mapping/highlight_sdps_groups.cxc, results/structural_mapping/highlight_sdps_families.cxc, results/structural_mapping/highlight_sdps_subfamilies.cxc`
+- Re-run status after restricted Phase 5 update:
+  - Regenerated ChimeraX scripts from the refreshed BADASP score tables on 2026-04-20.
+  - Current script outputs are the per-level files above in `results/structural_mapping/`.
 
 ## Phase 7 Metrics (Evolutionary & Physicochemical Analysis)
 - Implementation: TDD-first with `src/evolutionary_analysis.py` and `tests/test_evolutionary_analysis.py`
@@ -450,6 +467,10 @@
   - `results/evolutionary_analysis/coevolution_matrix.csv`
 - Physicochemical trajectory output: `results/evolutionary_analysis/physicochemical_shifts.csv`
 - Top functional SDP synthesis output: `results/evolutionary_analysis/top_functional_sdps.csv`
+- Rerun status after restricted Phase 5 update:
+  - Phase 7 was rerun against `results/topological_clustering/mad_rooted.tree` and the duplication-filtered BADASP outputs in `results/badasp_scoring/`.
+  - Latest regenerated artifact observed during the rerun: `results/evolutionary_analysis/switch_timeline.svg` (timestamp 2026-04-21 09:00)
+  - Downstream matrices and clustered outputs were regenerated in `results/evolutionary_analysis/` to match the purified BADASP scores.
 - ToolUniverse enrichment backend: `ProtParam_calculate`
 - ToolUniverse literature queries executed:
   - `IPR019888 active site`

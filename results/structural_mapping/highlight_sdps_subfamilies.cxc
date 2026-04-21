@@ -1,0 +1,35 @@
+# BADASP Phase 6 structural mapping: Subfamilies
+open /Users/lucla/Desktop/repos/BADASP/data/raw/2cg4.pdb
+set bgColor white
+lighting soft
+lighting shadows false
+lighting depthCue false
+graphics silhouettes true color black width 4
+material dull
+show cartoon
+hide atoms
+color protein gainsboro
+color :17 #BA7373
+color :22 #BA7373
+color :34 #BA7373
+color :37 #BA7373
+color :38 #BA7373
+color :39 #BA7373
+color :42 #BA7373
+color :46 #BA7373
+color :50 #BA7373
+color :52 #BA7373
+color :54 #BA7373
+color :64 #BA7373
+color :73 #BA7373
+color :78 #BA7373
+color :89 #BA7373
+color :102 #BA7373
+color :105 #7A0000
+color :108 #BA7373
+color :109 #BA7373
+color :123 #BA7373
+color :127 #BA7373
+color :131 #BA7373
+color :133 #BA7373
+# subfamilies_residues: 17,22,34,37,38,39,42,46,50,52,54,64,73,78,89,102,105,108,109,123,127,131,133
