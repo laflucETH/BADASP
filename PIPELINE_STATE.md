@@ -3,8 +3,8 @@
 ## Project
 - Name: BADASP replication pipeline for IPR019888 (PF13404 track included)
 - Mode: Reproducible, modular Python workflow
-- Current date: 2026-04-20
-- Status: Monday core phases (3, 4, 9) completed; Phase 5-7 pending review
+- Current date: 2026-04-21
+- Status: Fresh Phase 4 ASR rebuild completed on the expanded 21,641-sequence dataset; Phase 5 scoring audited with reconciliation filtering
 
 ## Monday Completion Milestone (2026-04-20)
 - **Phase 3 (Clustering):** Verified existing MAD-rooted tree from weekend (1.2MB, 21,641+ sequences, valid Newick format). Skipped re-clustering to save time. Tree confirmed: `results/topological_clustering/mad_rooted.tree`
@@ -16,6 +16,22 @@
   - Execution time: ~5 minutes (includes initial ete3 NCBITaxa database download)
   - Tests: 5/5 reconciliation tests pass; full suite: 89/89 passed
 - Progress-visibility instrumentation remained from weekend pass; validated with full test suite.
+
+## Phase 4/5 Rebuild Checkpoint (2026-04-21)
+- **Phase 4 (ASR) rebuild:** Old ASR artifacts were removed and a clean full rerun was executed against `data/interim/IPR019888_trimmed.aln` and `data/interim/IPR019888.tree`.
+  - IQ-TREE input: `21641` sequences with `169` amino-acid sites
+  - Output: `data/interim/asr_run.state`, `data/interim/asr_run.treefile`, `data/interim/ancestral_sequences.fasta`
+  - Extracted LCA ancestral sequences: `141`
+- **Phase 5 (BADASP) audit after reconciliation filtering:**
+  - Groups: `0` unique sister pairs compared, threshold `0.000000`, maximum absolute switch count `0`, active positions `0`, top SDP survivors `169`
+  - Families: `0` unique sister pairs compared, threshold `0.000000`, maximum absolute switch count `0`, active positions `0`, top SDP survivors `169`
+  - Subfamilies: `3` unique sister pairs compared, threshold `1.395899`, maximum absolute switch count `2`, active positions `24`, top SDP survivors `1`
+  - Raw pairwise CSVs confirm the reconciliation filter removed all Group/Family pairs and preserved a small Subfamily signal
+- **Performance hardening completed during the rebuild:**
+  - Recent conservation calculation switched to a frequency-weighted implementation
+  - Sister-pair LCA resolution now caches cluster LCAs once per level
+  - Hierarchical node membership resolution now uses set-based accumulation
+  - Pairwise score accumulation now uses compact columns and per-position aggregates to avoid excessive memory growth
 
 ## Progress Visibility Checkpoint (2026-04-20)
 - Added user-visible progress indicators across long-running pipeline sections to reduce "stuck vs slow" ambiguity:

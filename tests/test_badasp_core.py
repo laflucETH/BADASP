@@ -16,6 +16,7 @@ from src.badasp_core import (
     load_reconciliation_events,
     _filter_pairs_by_reconciliation,
     _resolve_hierarchical_lca_nodes,
+    _validate_lca_coverage,
 )
 
 
@@ -172,6 +173,16 @@ def test_resolve_hierarchical_lca_nodes_ignores_missing_tree_members(temp_data_d
     assert resolved["F1"] == "Node1"
 
 
+def test_validate_lca_coverage_raises_on_low_coverage():
+    with pytest.raises(ValueError, match="coverage"):
+        _validate_lca_coverage(
+            level="group",
+            level_lcas={1: "Node1", 2: "Node2", 3: "Node3", 4: "Node4"},
+            ancestral_seqs={"Node1": "AC"},
+            min_coverage=0.95,
+        )
+
+
 def test_calculate_ancestral_conservation_binary():
     assert calculate_ancestral_conservation("A", "A") == 1
     assert calculate_ancestral_conservation("A", "F") == -1
@@ -285,6 +296,21 @@ def test_identify_sdps_prefers_switch_count():
     sdps, threshold = identify_sdps(scores_df)
     assert threshold == pytest.approx(0.75)
     assert set(sdps["position"]) == {2, 3}
+
+
+def test_identify_sdps_returns_empty_when_no_switches():
+    scores_df = pd.DataFrame(
+        {
+            "position": [1, 2, 3],
+            "max_score": [0.0, 0.0, 0.0],
+            "switch_count": [0, 0, 0],
+            "global_threshold": [0.0, 0.0, 0.0],
+            "badasp_score": [0.0, 0.0, 0.0],
+        }
+    )
+    sdps, threshold = identify_sdps(scores_df)
+    assert sdps.empty
+    assert threshold == 0.0
 
 
 def test_badasp_core_writes_three_level_outputs(

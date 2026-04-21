@@ -4,7 +4,7 @@ import subprocess
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from Bio import Phylo, SeqIO
 from Bio.Seq import Seq
@@ -117,28 +117,131 @@ def _read_hierarchical_lca_members(assignments_csv: Path) -> Dict[str, List[str]
     return members_by_node
 
 
+def _load_asr_node_mapping(mapping_csv: Path) -> Dict[str, str]:
+    if not mapping_csv.exists():
+        return {}
+
+    mapping: Dict[str, str] = {}
+    with mapping_csv.open("r", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames:
+            return mapping
+        required = {"lca_node", "lca_node_asr"}
+        if not required.issubset(reader.fieldnames):
+            return mapping
+        for row in reader:
+            lca_node = (row.get("lca_node") or "").strip()
+            asr_node = (row.get("lca_node_asr") or "").strip()
+            if lca_node and asr_node:
+                mapping[lca_node] = asr_node
+    return mapping
+
+
+def _resolve_cluster_token(token: str, candidate_ids: List[str]) -> str:
+    exact_matches = [candidate for candidate in candidate_ids if candidate == token]
+    if exact_matches:
+        return exact_matches[0]
+
+    prefix_matches = [candidate for candidate in candidate_ids if candidate.startswith(token)]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]
+    if len(prefix_matches) > 1:
+        raise ValueError(f"Ambiguous CD-HIT token {token!r}: {prefix_matches[:5]}")
+    return token
+
+
+def _load_cdhit_representative_mapping(cluster_map_csv: Path, clustered_fasta: Optional[Path] = None) -> Dict[str, str]:
+    if not cluster_map_csv.exists():
+        return {}
+
+    representative_ids: List[str] = []
+    if clustered_fasta is not None and clustered_fasta.exists():
+        representative_ids = [record.id for record in SeqIO.parse(str(clustered_fasta), "fasta")]
+
+    mapping: Dict[str, str] = {}
+    current_representative: Optional[str] = None
+    with cluster_map_csv.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith(">Cluster"):
+                current_representative = None
+                continue
+            if ">" not in line:
+                continue
+
+            member_token = line.split(">", 1)[1].split()[0].strip().rstrip(".")
+            if line.endswith("*"):
+                current_representative = _resolve_cluster_token(member_token, representative_ids)
+                mapping[member_token] = current_representative
+                mapping[current_representative] = current_representative
+                continue
+            if current_representative is not None:
+                mapping[member_token] = current_representative
+    return mapping
+
+
+def _resolve_representative_tip(member_id: str, representative_map: Dict[str, str]) -> str:
+    if member_id in representative_map:
+        return representative_map[member_id]
+
+    for prefix_end in range(len(member_id) - 1, 0, -1):
+        prefix = member_id[:prefix_end]
+        if prefix in representative_map:
+            return representative_map[prefix]
+
+    return member_id
+
+
 def extract_lca_ancestral_sequences(
     tree_path: Path,
     assignments_csv: Path,
     node_sequences: Dict[str, str],
     output_fasta: Path,
+    asr_mapping_csv: Optional[Path] = None,
+    cluster_mapping_csv: Optional[Path] = None,
     min_clade_size: int = 5,
 ) -> int:
     hierarchical_nodes = _read_hierarchical_lca_members(assignments_csv)
+    asr_node_map = _load_asr_node_mapping(asr_mapping_csv) if asr_mapping_csv is not None else {}
+    clustered_fasta = cluster_mapping_csv.with_suffix("") if cluster_mapping_csv is not None else None
+    representative_map = (
+        _load_cdhit_representative_mapping(cluster_mapping_csv, clustered_fasta=clustered_fasta)
+        if cluster_mapping_csv is not None
+        else {}
+    )
+    tree = Phylo.read(str(tree_path), "newick")
+    tree_tip_names = {terminal.name for terminal in tree.get_terminals() if terminal.name}
 
     records: List[SeqRecord] = []
 
-    # New hierarchical format: extract all unique LCA nodes across
-    # group_lca_node/family_lca_node/subfamily_lca_node (and any *_lca_node columns).
     if hierarchical_nodes:
-        tree = Phylo.read(str(tree_path), "newick")
         seen_nodes = set()
         for node_id in tqdm(sorted(hierarchical_nodes), desc="Extracting hierarchical LCAs", unit="node"):
             members = hierarchical_nodes[node_id]
-            lca_node = tree.common_ancestor(members)
-            resolved_node_id = lca_node.name
-            if not resolved_node_id:
-                raise ValueError(f"LCA node for {node_id} has no node name in ASR tree.")
+            resolved_node_id = asr_node_map.get(node_id, node_id)
+            if resolved_node_id == node_id:
+                tree_members = sorted(
+                    {
+                        resolved_member
+                        for resolved_member in (
+                            _resolve_representative_tip(member, representative_map) for member in members
+                        )
+                        if resolved_member in tree_tip_names
+                    }
+                )
+                if not tree_members:
+                    raise KeyError(f"No representative members available for LCA node {node_id}.")
+                try:
+                    lca_node = tree.common_ancestor(tree_members)
+                except Exception as exc:  # pragma: no cover - defensive wrap for tree lookup failures
+                    raise KeyError(
+                        f"No ancestral sequence found for LCA node {node_id} using members {tree_members[:5]}..."
+                    ) from exc
+                resolved_node_id = lca_node.name
+                if not resolved_node_id:
+                    raise ValueError(f"LCA node for {node_id} has no node name in ASR tree.")
             if resolved_node_id in seen_nodes:
                 continue
             if resolved_node_id not in node_sequences:
@@ -192,6 +295,8 @@ def run_asr_pipeline(
     output_fasta: Path,
     iqtree_binary: str = "iqtree2",
     output_prefix: Path = Path("data/interim/asr_run"),
+    asr_mapping_csv: Optional[Path] = None,
+    cluster_mapping_csv: Optional[Path] = None,
     min_clade_size: int = 5,
     reuse_existing: bool = False,
 ) -> int:
@@ -215,6 +320,8 @@ def run_asr_pipeline(
         assignments_csv=assignments_csv,
         node_sequences=node_sequences,
         output_fasta=output_fasta,
+        asr_mapping_csv=asr_mapping_csv,
+        cluster_mapping_csv=cluster_mapping_csv,
         min_clade_size=min_clade_size,
     )
 
@@ -227,6 +334,8 @@ def main() -> None:
     parser.add_argument("--output", default="data/interim/ancestral_sequences.fasta")
     parser.add_argument("--iqtree-binary", default="iqtree2")
     parser.add_argument("--prefix", default="data/interim/asr_run")
+    parser.add_argument("--asr-map", default="results/topological_clustering/tree_clusters_asr_mapped.csv")
+    parser.add_argument("--cluster-map", default="data/interim/IPR019888_clustered.fasta.clstr")
     parser.add_argument("--min-clade-size", type=int, default=5)
     parser.add_argument("--reuse-existing", action="store_true")
     args = parser.parse_args()
@@ -238,6 +347,8 @@ def main() -> None:
         output_fasta=Path(args.output),
         iqtree_binary=args.iqtree_binary,
         output_prefix=Path(args.prefix),
+        asr_mapping_csv=Path(args.asr_map) if args.asr_map else None,
+        cluster_mapping_csv=Path(args.cluster_map) if args.cluster_map else None,
         min_clade_size=args.min_clade_size,
         reuse_existing=args.reuse_existing,
     )

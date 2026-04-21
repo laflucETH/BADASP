@@ -53,6 +53,82 @@ def test_extract_lca_ancestral_sequences_writes_hierarchical_unique_nodes(tmp_pa
     assert {record.id for record in records} == {"Node1", "Node2", "Root"}
 
 
+def test_extract_lca_ancestral_sequences_uses_asr_mapping_csv(tmp_path: Path) -> None:
+    tree_file = tmp_path / "tree.nwk"
+    assignments_csv = tmp_path / "assignments.csv"
+    mapping_csv = tmp_path / "tree_clusters_asr_mapped.csv"
+    out_fasta = tmp_path / "ancestors.fasta"
+
+    tree_file.write_text("((A:0.1,B:0.1)Node1:0.2,(C:0.1,D:0.1)Node2:0.2)Root;\n", encoding="utf-8")
+    assignments_csv.write_text(
+        "sequence_id,group_id,group_lca_node,family_id,family_lca_node,subfamily_id,subfamily_lca_node\n"
+        "A,1,InternalNode_1,10,InternalNode_2,100,InternalNode_3\n"
+        "B,1,InternalNode_1,10,InternalNode_2,101,InternalNode_3\n",
+        encoding="utf-8",
+    )
+    mapping_csv.write_text(
+        "clade_id,member_count,lca_node,lca_node_asr\n"
+        "1,2,InternalNode_1,Node1\n"
+        "2,2,InternalNode_2,Node2\n"
+        "3,2,InternalNode_3,Root\n",
+        encoding="utf-8",
+    )
+
+    node_sequences = {"Node1": "AC", "Node2": "GT", "Root": "TT"}
+
+    written = extract_lca_ancestral_sequences(
+        tree_path=tree_file,
+        assignments_csv=assignments_csv,
+        node_sequences=node_sequences,
+        output_fasta=out_fasta,
+        asr_mapping_csv=mapping_csv,
+        min_clade_size=1,
+    )
+
+    records = list(SeqIO.parse(str(out_fasta), "fasta"))
+    assert written == 3
+    assert {record.id for record in records} == {"Node1", "Node2", "Root"}
+
+
+def test_extract_lca_ancestral_sequences_uses_cdhit_cluster_mapping(tmp_path: Path) -> None:
+    tree_file = tmp_path / "tree.nwk"
+    assignments_csv = tmp_path / "assignments.csv"
+    cluster_map = tmp_path / "clustered.fasta.clstr"
+    out_fasta = tmp_path / "ancestors.fasta"
+
+    tree_file.write_text("((RepA:0.1,RepB:0.1)Node1:0.2,RepC:0.2)Root;\n", encoding="utf-8")
+    assignments_csv.write_text(
+        "sequence_id,group_id,group_lca_node,family_id,family_lca_node,subfamily_id,subfamily_lca_node\n"
+        "raw1,1,Node1,10,Node1,100,Node1\n"
+        "raw2,1,Node1,10,Node1,100,Node1\n",
+        encoding="utf-8",
+    )
+    cluster_map.write_text(
+        ">Cluster 0\n"
+        "0\t100aa, >RepA *\n"
+        "1\t100aa, >raw1 at 99.00%\n"
+        ">Cluster 1\n"
+        "0\t100aa, >RepB *\n"
+        "1\t100aa, >raw2 at 99.00%\n",
+        encoding="utf-8",
+    )
+
+    node_sequences = {"RepA": "AC", "RepB": "GT", "Node1": "TT"}
+
+    written = extract_lca_ancestral_sequences(
+        tree_path=tree_file,
+        assignments_csv=assignments_csv,
+        node_sequences=node_sequences,
+        output_fasta=out_fasta,
+        cluster_mapping_csv=cluster_map,
+        min_clade_size=1,
+    )
+
+    records = list(SeqIO.parse(str(out_fasta), "fasta"))
+    assert written == 1
+    assert [record.id for record in records] == ["Node1"]
+
+
 def test_extract_lca_ancestral_sequences_raises_when_hierarchical_lca_missing(tmp_path: Path) -> None:
     tree_file = tmp_path / "tree.nwk"
     assignments_csv = tmp_path / "assignments.csv"
@@ -136,10 +212,20 @@ def test_run_asr_pipeline_runs_once_and_waits_for_state(monkeypatch, tmp_path: P
         assert path == state_file
         return {"Root": "A"}
 
-    def _mock_extract(tree_path, assignments_csv, node_sequences, output_fasta, min_clade_size=5):
+    def _mock_extract(
+        tree_path,
+        assignments_csv,
+        node_sequences,
+        output_fasta,
+        asr_mapping_csv=None,
+        cluster_mapping_csv=None,
+        min_clade_size=5,
+    ):
         assert tree_path == treefile
         assert assignments_csv == assignments
         assert node_sequences == {"Root": "A"}
+        assert asr_mapping_csv is None
+        assert cluster_mapping_csv is None
         output_fasta.write_text(">Root\nA\n", encoding="utf-8")
         return 1
 

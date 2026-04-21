@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+import warnings
 from collections import defaultdict
+from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -204,6 +206,21 @@ def _filter_pairs_by_reconciliation(
     return kept_pairs, skipped_pairs, skipped_speciation_pairs
 
 
+def _validate_lca_coverage(level: str, level_lcas: Dict[int, str], ancestral_seqs: Dict[str, str], min_coverage: float = 0.95) -> None:
+    if not level_lcas:
+        raise ValueError(f"No LCA nodes were resolved for {level}.")
+
+    missing = [node_id for node_id in level_lcas.values() if node_id not in ancestral_seqs]
+    coverage = 1.0 - (len(missing) / float(len(level_lcas)))
+    if missing:
+        message = (
+            f"{level.capitalize()} ASR coverage is {coverage:.2%} ({len(missing)}/{len(level_lcas)} LCA nodes missing from ancestral FASTA)."
+        )
+        if coverage < min_coverage:
+            raise ValueError(message)
+        warnings.warn(message, UserWarning, stacklevel=2)
+
+
 def parse_clade_assignments(assignments_path: Path) -> pd.DataFrame:
     return pd.read_csv(assignments_path)
 
@@ -216,13 +233,26 @@ def calculate_recent_conservation(sequences: List[str], position: int) -> float:
         return 0.0
     if len(residues) == 1:
         return 1.0
-    pair_scores = []
-    for i in range(len(residues)):
-        for j in range(i + 1, len(residues)):
-            pair_scores.append(_blosum62_pair_score(residues[i], residues[j]))
-    if not pair_scores:
+
+    counts = Counter(residues)
+    residue_types = list(counts)
+    total_pairs = (len(residues) * (len(residues) - 1)) // 2
+    if total_pairs == 0:
         return 0.0
-    mean_score = float(np.mean(pair_scores))
+
+    weighted_pair_sum = 0.0
+    for i, aa_i in enumerate(residue_types):
+        count_i = counts[aa_i]
+
+        # Same-residue pairs contribute nC2 pairs at the diagonal substitution score.
+        same_pairs = (count_i * (count_i - 1)) // 2
+        if same_pairs:
+            weighted_pair_sum += same_pairs * _blosum62_pair_score(aa_i, aa_i)
+
+        for aa_j in residue_types[i + 1 :]:
+            weighted_pair_sum += (count_i * counts[aa_j]) * _blosum62_pair_score(aa_i, aa_j)
+
+    mean_score = weighted_pair_sum / float(total_pairs)
     normalized_score = (mean_score + 4.0) / 15.0
     return float(np.clip(normalized_score, 0.0, 1.0))
 
@@ -263,7 +293,7 @@ def _resolve_hierarchical_lca_nodes(assignments: pd.DataFrame, tree: Tree) -> Di
         return {}
 
     terminal_names = {terminal.name for terminal in tree.get_terminals() if terminal.name}
-    node_members: Dict[str, List[str]] = defaultdict(list)
+    node_members: Dict[str, set] = defaultdict(set)
     for _, row in assignments.iterrows():
         sequence_id = str(row["sequence_id"])
         for col in lca_columns:
@@ -271,8 +301,8 @@ def _resolve_hierarchical_lca_nodes(assignments: pd.DataFrame, tree: Tree) -> Di
             if pd.isna(raw_label):
                 continue
             label = str(raw_label).strip()
-            if label and sequence_id not in node_members[label]:
-                node_members[label].append(sequence_id)
+            if label:
+                node_members[label].add(sequence_id)
 
     resolved: Dict[str, str] = {}
     for label, members in node_members.items():
@@ -307,6 +337,10 @@ def _nearest_sister_pairs_for_level(
     pairs = set()
     cluster_ids = sorted(int(cid) for cid in members_by_cluster.keys())
 
+    cluster_nodes: Dict[int, Clade] = {}
+    for cluster_id in tqdm(cluster_ids, desc=f"Resolving {level} LCAs", unit="cluster"):
+        cluster_nodes[cluster_id] = tree.common_ancestor(members_by_cluster[cluster_id])
+
     for cluster_id in tqdm(cluster_ids, desc=f"Pairing {level}s", unit="cluster"):
         parent_value = cluster_to_parent[cluster_id]
         candidates = [
@@ -317,11 +351,11 @@ def _nearest_sister_pairs_for_level(
         if not candidates:
             continue
 
-        cluster_node = tree.common_ancestor(members_by_cluster[cluster_id])
+        cluster_node = cluster_nodes[cluster_id]
         nearest_id = None
         nearest_distance = float("inf")
         for other_id in candidates:
-            other_node = tree.common_ancestor(members_by_cluster[other_id])
+            other_node = cluster_nodes[other_id]
             distance = float(tree.distance(cluster_node, other_node))
             if distance < nearest_distance or (
                 distance == nearest_distance and (nearest_id is None or other_id < nearest_id)
@@ -370,20 +404,41 @@ def _compute_level_scores(
             raise KeyError(f"No resolved ASR node found for {raw_lca}.")
         level_lcas[int(cluster_id)] = resolved_lca_nodes[raw_lca]
 
+    _validate_lca_coverage(level=level, level_lcas=level_lcas, ancestral_seqs=ancestral_seqs)
+
     filtered_pairs, skipped_pairs, skipped_speciation_pairs = _filter_pairs_by_reconciliation(
         pairs=pairs,
         level_lcas=level_lcas,
         reconciliation_events=reconciliation_events or {},
     )
 
-    pairwise_scores: List[Dict[str, object]] = []
+    pair_col: List[str] = []
+    pos_col: List[int] = []
+    rc_col: List[float] = []
+    ac_col: List[float] = []
+    p_ac_col: List[float] = []
+    score_col: List[float] = []
+    rc_cache: Dict[Tuple[int, int], float] = {}
+    posterior_cache: Dict[Tuple[str, int, str], float] = {}
+    position_max_scores = np.full(aln_length, -np.inf, dtype=float)
+
+    def _rc(cluster_id: int, pos: int) -> float:
+        key = (cluster_id, pos)
+        if key not in rc_cache:
+            rc_cache[key] = calculate_recent_conservation(level_sequences[cluster_id], pos)
+        return rc_cache[key]
+
+    def _posterior(node: str, site: int, aa: str) -> float:
+        key = (node, site, aa)
+        if key not in posterior_cache:
+            posterior_cache[key] = extract_posterior_probability(state_data, node, site, aa)
+        return posterior_cache[key]
+
     for cluster_a, cluster_b in tqdm(filtered_pairs, desc=f"Scoring {level} sister pairs", unit="pair"):
         if cluster_a not in level_sequences or cluster_b not in level_sequences:
             continue
         lca_a = level_lcas[cluster_a]
         lca_b = level_lcas[cluster_b]
-        if lca_a not in ancestral_seqs or lca_b not in ancestral_seqs:
-            continue
         for pos in range(aln_length):
             if pos >= len(ancestral_seqs[lca_a]) or pos >= len(ancestral_seqs[lca_b]):
                 continue
@@ -391,34 +446,36 @@ def _compute_level_scores(
             aa_b = ancestral_seqs[lca_b][pos]
             if aa_a in {"-", "."} or aa_b in {"-", "."}:
                 continue
-            rc_a = calculate_recent_conservation(level_sequences[cluster_a], pos)
-            rc_b = calculate_recent_conservation(level_sequences[cluster_b], pos)
+            rc_a = _rc(cluster_a, pos)
+            rc_b = _rc(cluster_b, pos)
             rc = (rc_a + rc_b) / 2.0
             ac = calculate_ancestral_conservation(aa_a, aa_b)
-            p_a = extract_posterior_probability(state_data, lca_a, pos + 1, aa_a)
-            p_b = extract_posterior_probability(state_data, lca_b, pos + 1, aa_b)
+            p_a = _posterior(lca_a, pos + 1, aa_a)
+            p_b = _posterior(lca_b, pos + 1, aa_b)
             p_ac = (p_a + p_b) / 2.0
             score = rc - (ac * p_ac)
-            pairwise_scores.append(
-                {
-                    "level": level,
-                    "pair": f"{cluster_a}-{cluster_b}",
-                    "position": pos + 1,
-                    "rc": rc,
-                    "ac": ac,
-                    "p_ac": p_ac,
-                    "score": score,
-                }
-            )
+            site = pos + 1
+            pair_col.append(f"{cluster_a}-{cluster_b}")
+            pos_col.append(site)
+            rc_col.append(rc)
+            ac_col.append(ac)
+            p_ac_col.append(p_ac)
+            score_col.append(score)
+            if score > position_max_scores[pos]:
+                position_max_scores[pos] = score
 
-    flat_scores = [entry["score"] for entry in pairwise_scores]
+    flat_scores = [score for score in score_col if score > 0]
     global_threshold = float(np.percentile(flat_scores, 95)) if flat_scores else 0.0
+
+    switch_counts = np.zeros(aln_length, dtype=int)
+    for idx, score in enumerate(score_col):
+        if score > global_threshold:
+            switch_counts[pos_col[idx] - 1] += 1
 
     position_rows = []
     for pos in range(1, aln_length + 1):
-        pos_scores = [entry["score"] for entry in pairwise_scores if entry["position"] == pos]
-        max_score = max(pos_scores) if pos_scores else 0.0
-        switch_count = int(sum(1 for score in pos_scores if score > global_threshold))
+        max_score = float(position_max_scores[pos - 1]) if np.isfinite(position_max_scores[pos - 1]) else 0.0
+        switch_count = int(switch_counts[pos - 1])
         position_rows.append(
             {
                 "position": pos,
@@ -432,17 +489,30 @@ def _compute_level_scores(
     score_df = pd.DataFrame(position_rows)
     sdp_df, threshold = identify_sdps(score_df)
 
-    if pairwise_scores:
-        max_entry = max(pairwise_scores, key=lambda row: row["score"])
+    if score_col:
+        max_idx = int(np.argmax(score_col))
         print(
-            f"[{level.upper()}] Max Pos: Pos={max_entry['position']}, RC={max_entry['rc']:.6f}, AC={max_entry['ac']:.6f}, p={max_entry['p_ac']:.6f}, Score={max_entry['score']:.6f}"
+            f"[{level.upper()}] Max Pos: Pos={pos_col[max_idx]}, RC={rc_col[max_idx]:.6f}, AC={ac_col[max_idx]:.6f}, p={p_ac_col[max_idx]:.6f}, Score={score_col[max_idx]:.6f}"
         )
-        print(f"[{level.upper()}] Global pooled threshold (95th percentile): {global_threshold:.6f}")
+        print(f"[{level.upper()}] Global pooled threshold (95th percentile over score>0): {global_threshold:.6f}")
     if skipped_speciation_pairs:
         print(f"[{level.upper()}] Filtered {skipped_speciation_pairs} sister pairs marked as Speciation in reconciliation data.")
 
+    pairwise_df = pd.DataFrame(
+        {
+            "level": [level] * len(score_col),
+            "pair": pair_col,
+            "position": pos_col,
+            "rc": rc_col,
+            "ac": ac_col,
+            "p_ac": p_ac_col,
+            "score": score_col,
+        },
+        columns=pairwise_columns,
+    )
+
     return {
-        "pairwise": pd.DataFrame(pairwise_scores, columns=pairwise_columns),
+        "pairwise": pairwise_df,
         "scores": score_df,
         "sdps": sdp_df,
         "threshold": threshold,
@@ -530,6 +600,10 @@ def compute_multilevel_badasp_scores(
 def identify_sdps(scores_df: pd.DataFrame, percentile: float = 95.0) -> Tuple[pd.DataFrame, float]:
     if "switch_count" in scores_df.columns:
         max_switch_count = scores_df["switch_count"].max()
+        if scores_df.empty or max_switch_count <= 0:
+            threshold = float(scores_df["global_threshold"].iloc[0]) if "global_threshold" in scores_df.columns and not scores_df.empty else 0.0
+            empty = scores_df.iloc[0:0].copy()
+            return empty, threshold
         sdps = scores_df[scores_df["switch_count"] == max_switch_count].copy()
         sdps = sdps.sort_values(["switch_count", "max_score"], ascending=[False, False]).reset_index(drop=True)
         threshold = float(scores_df["global_threshold"].iloc[0]) if "global_threshold" in scores_df.columns and not scores_df.empty else float(np.percentile(scores_df["badasp_score"], percentile))
