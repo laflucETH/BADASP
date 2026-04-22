@@ -346,3 +346,45 @@ def test_badasp_core_writes_three_level_outputs(
     assert (output_dir / "raw_pairwise_groups.csv").exists()
     assert (output_dir / "raw_pairwise_families.csv").exists()
     assert (output_dir / "raw_pairwise_subfamilies.csv").exists()
+
+
+def test_filter_pairs_by_reconciliation_skips_filter_on_name_mismatch():
+    """Test that reconciliation filter is disabled when node names don't match.
+    
+    Regression test for bug where reconciliation from topology tree had Event_* names
+    but BADASP used ASR tree Node_* names, causing all pairs to filter.
+    """
+    pairs = [(1, 2), (3, 4)]
+    level_lcas = {1: "Node1", 2: "Node2", 3: "Node3", 4: "Node4"}
+    reconciliation_events = {"Event_1": "Duplication", "Event_2": "Duplication"}
+    
+    filtered_pairs, skipped, skipped_spec = _filter_pairs_by_reconciliation(
+        pairs, level_lcas, reconciliation_events
+    )
+    
+    # When no node names match, all pairs should be kept with warning
+    assert len(filtered_pairs) == len(pairs)
+    assert skipped == 0
+    assert skipped_spec == 0
+
+
+def test_filter_pairs_by_reconciliation_applies_filter_on_name_match():
+    """Test that reconciliation filter works normally when node names match."""
+    pairs = [(1, 2), (3, 4)]
+    level_lcas = {1: "Event_1", 2: "Event_2", 3: "Event_3", 4: "Event_4"}
+    reconciliation_events = {
+        "Event_1": "Duplication",
+        "Event_2": "Duplication",
+        "Event_3": "Duplication",
+        "Event_4": "Speciation",  # This pair will be skipped
+    }
+    
+    filtered_pairs, skipped, skipped_spec = _filter_pairs_by_reconciliation(
+        pairs, level_lcas, reconciliation_events
+    )
+    
+    # Only pair (1,2) should be kept since (3,4) has a Speciation event
+    assert len(filtered_pairs) == 1
+    assert filtered_pairs[0] == (1, 2)
+    assert skipped == 1
+    assert skipped_spec == 1

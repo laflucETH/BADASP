@@ -189,6 +189,21 @@ def _filter_pairs_by_reconciliation(
     if not reconciliation_events:
         return pairs, 0, 0
 
+    # Detect node name mismatch: check if any LCA nodes match reconciliation keys
+    lca_values = set(level_lcas.values())
+    recon_keys = set(reconciliation_events.keys())
+    matching_nodes = lca_values & recon_keys
+    
+    if not matching_nodes:
+        # No matching node names → skip filter and return all pairs
+        warnings.warn(
+            f"No LCA nodes matched reconciliation keys. LCA sample: {sorted(lca_values)[:3]}, "
+            f"Recon sample: {sorted(recon_keys)[:3]}. Skipping reconciliation filter.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return pairs, 0, 0
+
     kept_pairs: List[Tuple[int, int]] = []
     skipped_pairs = 0
     skipped_speciation_pairs = 0
