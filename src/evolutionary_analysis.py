@@ -4,7 +4,9 @@ import argparse
 import json
 import re
 import subprocess
+import os
 from collections import Counter
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -13,6 +15,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from Bio import Phylo, SeqIO
+from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from Bio.PDB import PDBParser
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import pdist, squareform
@@ -440,6 +443,22 @@ def _collect_architecture_switch_values(level_scores: pd.DataFrame, domain_arch:
     return values
 
 
+def _compute_architecture_enrichment(level_scores: pd.DataFrame, domain_arch: Dict[str, Sequence[int]]) -> pd.DataFrame:
+    domain_values = _collect_architecture_switch_values(level_scores, domain_arch)
+    rows: List[dict] = []
+    for domain, values in domain_values.items():
+        count = sum(values)
+        width = _domain_residue_width(domain_arch, domain)
+        density = float(count) / float(width) if width > 0 else 0.0
+        rows.append({
+            "domain": domain,
+            "switch_count": count,
+            "domain_width": width,
+            "switch_density": density
+        })
+    return pd.DataFrame(rows)
+
+
 def _plot_architecture_boxplot(
     level_scores: pd.DataFrame,
     domain_arch: Dict[str, Sequence[int]],
@@ -631,7 +650,18 @@ def _tu_literature_hits(query: str, max_hits: int = 5) -> List[dict]:
     return []
 
 
+@lru_cache(maxsize=2048)
 def _protparam(sequence: str) -> dict:
+    if os.getenv("BADASP_LOCAL_PROTPARAM", "0") == "1":
+        cleaned = "".join([aa for aa in sequence.upper() if aa.isalpha()])
+        if not cleaned:
+            return {}
+        analysis = ProteinAnalysis(cleaned)
+        return {
+            "gravy": float(analysis.gravy()),
+            "isoelectric_point": float(analysis.isoelectric_point()),
+        }
+
     payload = json.dumps({"sequence": sequence})
     result = _run_tu_json(["tu", "run", "ProtParam_calculate", payload, "--json"])
     if result.get("status") == "success":
@@ -1029,34 +1059,35 @@ def run_phase7_analyses(
     )
     outputs["physicochemical_mapping_cxc"] = physio_cxc
 
-    lit_queries = [
-        "IPR019888 active site",
-        "IPR019888 specificity residues",
-        "AraC family DNA-binding specificity residues",
-    ]
-    print("ToolUniverse literature cross-reference")
-    print(f"- Queries executed: {', '.join(lit_queries)}")
-    all_hits: List[dict] = []
-    for query in lit_queries:
-        all_hits.extend(_tu_literature_hits(query, max_hits=3))
-    print(f"- Candidate literature hits retrieved: {len(all_hits)}")
+    if os.getenv("BADASP_SKIP_LITERATURE", "0") != "1":
+        lit_queries = [
+            "IPR019888 active site",
+            "IPR019888 specificity residues",
+            "AraC family DNA-binding specificity residues",
+        ]
+        print("ToolUniverse literature cross-reference")
+        print(f"- Queries executed: {', '.join(lit_queries)}")
+        all_hits: List[dict] = []
+        for query in lit_queries:
+            all_hits.extend(_tu_literature_hits(query, max_hits=3))
+        print(f"- Candidate literature hits retrieved: {len(all_hits)}")
 
-    top_predicted = set()
-    for level in LEVELS:
-        top_predicted.update(top_positions_for_lit.get(level, [])[:10])
-    matched_mentions: List[Tuple[str, int]] = []
-    for hit in all_hits:
-        blob = " ".join(str(hit.get(key, "")) for key in ["title", "abstract", "snippet", "summary"]).lower()
-        for residue in sorted(top_predicted):
-            if str(residue) in blob:
-                matched_mentions.append((str(hit.get("title", "untitled")), residue))
+        top_predicted = set()
+        for level in LEVELS:
+            top_predicted.update(top_positions_for_lit.get(level, [])[:10])
+        matched_mentions: List[Tuple[str, int]] = []
+        for hit in all_hits:
+            blob = " ".join(str(hit.get(key, "")) for key in ["title", "abstract", "snippet", "summary"]).lower()
+            for residue in sorted(top_predicted):
+                if str(residue) in blob:
+                    matched_mentions.append((str(hit.get("title", "untitled")), residue))
 
-    if matched_mentions:
-        print("- Overlap between literature residue mentions and top predicted SDPs:")
-        for title, residue in matched_mentions[:10]:
-            print(f"  residue {residue}: {title}")
-    else:
-        print("- No direct residue-number overlap found in retrieved snippets (manual curation recommended).")
+        if matched_mentions:
+            print("- Overlap between literature residue mentions and top predicted SDPs:")
+            for title, residue in matched_mentions[:10]:
+                print(f"  residue {residue}: {title}")
+        else:
+            print("- No direct residue-number overlap found in retrieved snippets (manual curation recommended).")
 
     return outputs
 

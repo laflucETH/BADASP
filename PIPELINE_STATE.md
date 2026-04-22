@@ -6,6 +6,11 @@
 - Current date: 2026-04-22
 - Status: Phase 5 reconciliation regenerated from rooted ASR tree and full BADASP scoring rerun completed with non-zero Group/Family/Subfamily outputs
 
+## Latest Run Status (2026-04-22)
+- Phase 6 and 7 dynamic reruns are complete using the local fast-path (`BADASP_LOCAL_PROTPARAM=1 BADASP_SKIP_LITERATURE=1`).
+- All downstream evolutionary and physicochemical figures are organically freshly synced following the restoration of the `_compute_architecture_enrichment` function.
+- Audit reported 0 stale files, verifying that the fast-path generation successfully updated all artifacts.
+
 ## Monday Completion Milestone (2026-04-20)
 - **Phase 3 (Clustering):** Verified existing MAD-rooted tree from weekend (1.2MB, 21,641+ sequences, valid Newick format). Skipped re-clustering to save time. Tree confirmed: `results/topological_clustering/mad_rooted.tree`
 - **Phase 4 (ASR):** Ancestral sequences pre-extracted and verified at `data/interim/ancestral_sequences.fasta` (29KB, 576 lines representing hierarchical LCA nodes).
