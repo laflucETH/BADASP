@@ -89,7 +89,8 @@ def run_reconciliation(
     if phylo_tree_factory is None:
         from ete3 import PhyloTree
 
-        phylo_tree_factory = PhyloTree
+        def phylo_tree_factory(path: str) -> Any:
+            return PhyloTree(path, format=1)
 
     leaf_taxa = load_alignment_taxa(alignment_path)
     leaf_taxids = _resolve_leaf_taxids(leaf_taxa, ncbi)
@@ -99,6 +100,7 @@ def run_reconciliation(
         ncbi.get_topology(unique_taxids)
 
     gene_tree = phylo_tree_factory(str(gene_tree_path))
+    gene_tree.set_outgroup(gene_tree.get_midpoint_outgroup())
     for leaf in gene_tree.iter_leaves():
         taxid = leaf_taxids.get(leaf.name)
         if taxid is not None:
@@ -118,7 +120,7 @@ def run_reconciliation(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run gene/species reconciliation and classify duplication/speciation nodes.")
-    parser.add_argument("--gene-tree", default="results/topological_clustering/mad_rooted.tree")
+    parser.add_argument("--gene-tree", default="data/interim/asr_run.treefile")
     parser.add_argument("--alignment", default="data/interim/IPR019888_trimmed.aln")
     parser.add_argument("--output", default="results/reconciliation/duplication_nodes.csv")
     return parser

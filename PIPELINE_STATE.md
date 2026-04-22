@@ -3,8 +3,8 @@
 ## Project
 - Name: BADASP replication pipeline for IPR019888 (PF13404 track included)
 - Mode: Reproducible, modular Python workflow
-- Current date: 2026-04-21
-- Status: Fresh Phase 4 ASR rebuild completed on the expanded 21,641-sequence dataset; Phase 5 scoring audited with reconciliation filtering
+- Current date: 2026-04-22
+- Status: Phase 5 reconciliation regenerated from rooted ASR tree and full BADASP scoring rerun completed with non-zero Group/Family/Subfamily outputs
 
 ## Monday Completion Milestone (2026-04-20)
 - **Phase 3 (Clustering):** Verified existing MAD-rooted tree from weekend (1.2MB, 21,641+ sequences, valid Newick format). Skipped re-clustering to save time. Tree confirmed: `results/topological_clustering/mad_rooted.tree`
@@ -17,21 +17,21 @@
   - Tests: 5/5 reconciliation tests pass; full suite: 89/89 passed
 - Progress-visibility instrumentation remained from weekend pass; validated with full test suite.
 
-## Phase 4/5 Rebuild Checkpoint (2026-04-21)
-- **Phase 4 (ASR) rebuild:** Old ASR artifacts were removed and a clean full rerun was executed against `data/interim/IPR019888_trimmed.aln` and `data/interim/IPR019888.tree`.
-  - IQ-TREE input: `21641` sequences with `169` amino-acid sites
-  - Output: `data/interim/asr_run.state`, `data/interim/asr_run.treefile`, `data/interim/ancestral_sequences.fasta`
-  - Extracted LCA ancestral sequences: `141`
-- **Phase 5 (BADASP) audit after reconciliation filtering:**
-  - Groups: `0` unique sister pairs compared, threshold `0.000000`, maximum absolute switch count `0`, active positions `0`, top SDP survivors `169`
-  - Families: `0` unique sister pairs compared, threshold `0.000000`, maximum absolute switch count `0`, active positions `0`, top SDP survivors `169`
-  - Subfamilies: `3` unique sister pairs compared, threshold `1.395899`, maximum absolute switch count `2`, active positions `24`, top SDP survivors `1`
-  - Raw pairwise CSVs confirm the reconciliation filter removed all Group/Family pairs and preserved a small Subfamily signal
-- **Performance hardening completed during the rebuild:**
-  - Recent conservation calculation switched to a frequency-weighted implementation
-  - Sister-pair LCA resolution now caches cluster LCAs once per level
-  - Hierarchical node membership resolution now uses set-based accumulation
-  - Pairwise score accumulation now uses compact columns and per-position aggregates to avoid excessive memory growth
+## Phase 5 Reconciliation Fix Checkpoint (2026-04-22)
+- **Root Cause Fixed:** Reconciliation was regenerated from the rooted ASR tree (`data/interim/asr_run.treefile`) so node names now match BADASP’s `Node*` LCA labels directly. The earlier topology-tree `Event_*` mismatch is no longer used for Phase 5 scoring.
+- **Reconciliation Output:** `results/reconciliation/duplication_nodes.csv` now contains `21,639` mapped node events with `Node*` labels.
+- **Missing-sequence Audit Log:** `_compute_level_scores()` writes skipped-pair records to `results/badasp_scoring/skipped_audit.log` when an LCA sequence is missing from `ancestral_seqs`.
+- **Regression Coverage:**
+  - `test_remap_reconciliation_events_to_asr_nodes_matches_leaf_sets`
+  - `test_filter_pairs_by_reconciliation_raises_on_unmapped_names`
+  - `test_compute_level_scores_logs_missing_ancestral_sequence`
+  - Full `tests/test_badasp_core.py`: **16/16 passing**
+- **Phase 5 Real-Data Results:**
+  - Groups: `4` unique sister pairs compared, threshold `1.194763`, maximum absolute switch count `2`, active positions `9`, top SDP survivors `2`
+  - Families: `19` unique sister pairs compared, threshold `1.194541`, maximum absolute switch count `3`, active positions `31`, top SDP survivors `1`
+  - Subfamilies: `72` unique sister pairs compared, threshold `1.309915`, maximum absolute switch count `9`, active positions `88`, top SDP survivors `1`
+  - `results/badasp_scoring/skipped_audit.log` captured the missing `Node5117` sequence for subfamily pairs and the scoring loop continued safely.
+- **Operational Note:** The pipeline now filters speciation pairs on real data and no longer relies on a skip fallback.
 
 ## Progress Visibility Checkpoint (2026-04-20)
 - Added user-visible progress indicators across long-running pipeline sections to reduce "stuck vs slow" ambiguity:

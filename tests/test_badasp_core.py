@@ -15,6 +15,7 @@ from src.badasp_core import (
     load_state_file,
     load_reconciliation_events,
     _filter_pairs_by_reconciliation,
+    _remap_reconciliation_events_to_asr_nodes,
     _resolve_hierarchical_lca_nodes,
     _validate_lca_coverage,
 )
@@ -348,43 +349,56 @@ def test_badasp_core_writes_three_level_outputs(
     assert (output_dir / "raw_pairwise_subfamilies.csv").exists()
 
 
-def test_filter_pairs_by_reconciliation_skips_filter_on_name_mismatch():
-    """Test that reconciliation filter is disabled when node names don't match.
-    
-    Regression test for bug where reconciliation from topology tree had Event_* names
-    but BADASP used ASR tree Node_* names, causing all pairs to filter.
-    """
-    pairs = [(1, 2), (3, 4)]
-    level_lcas = {1: "Node1", 2: "Node2", 3: "Node3", 4: "Node4"}
-    reconciliation_events = {"Event_1": "Duplication", "Event_2": "Duplication"}
-    
-    filtered_pairs, skipped, skipped_spec = _filter_pairs_by_reconciliation(
-        pairs, level_lcas, reconciliation_events
-    )
-    
-    # When no node names match, all pairs should be kept with warning
-    assert len(filtered_pairs) == len(pairs)
-    assert skipped == 0
-    assert skipped_spec == 0
+def test_remap_reconciliation_events_to_asr_nodes_matches_leaf_sets(temp_data_dir):
+    from Bio import Phylo
+
+    topology_path = temp_data_dir / "topology.tree"
+    asr_path = temp_data_dir / "asr.tree"
+    topology_path.write_text("((A:0.1,B:0.1)Event_1:0.2,C:0.3)Event_2;", encoding="utf-8")
+    asr_path.write_text("((A:0.1,B:0.1)Node1:0.2,C:0.3)Node2;", encoding="utf-8")
+
+    topology_tree = Phylo.read(topology_path, "newick")
+    asr_tree = Phylo.read(asr_path, "newick")
+    events = {"Event_1": "Duplication", "Event_2": "Speciation"}
+
+    remapped = _remap_reconciliation_events_to_asr_nodes(events, topology_tree, asr_tree)
+
+    assert remapped == {"Node1": "Duplication", "Node2": "Speciation"}
 
 
-def test_filter_pairs_by_reconciliation_applies_filter_on_name_match():
-    """Test that reconciliation filter works normally when node names match."""
-    pairs = [(1, 2), (3, 4)]
-    level_lcas = {1: "Event_1", 2: "Event_2", 3: "Event_3", 4: "Event_4"}
-    reconciliation_events = {
-        "Event_1": "Duplication",
-        "Event_2": "Duplication",
-        "Event_3": "Duplication",
-        "Event_4": "Speciation",  # This pair will be skipped
-    }
-    
-    filtered_pairs, skipped, skipped_spec = _filter_pairs_by_reconciliation(
-        pairs, level_lcas, reconciliation_events
+def test_filter_pairs_by_reconciliation_raises_on_unmapped_names():
+    pairs = [(1, 2)]
+    level_lcas = {1: "Node1", 2: "Node2"}
+    reconciliation_events = {"Event_1": "Duplication", "Event_2": "Speciation"}
+
+    with pytest.raises(ValueError, match="No reconciliation node names matched"):
+        _filter_pairs_by_reconciliation(pairs, level_lcas, reconciliation_events)
+
+
+def test_compute_level_scores_logs_missing_ancestral_sequence(temp_data_dir, sample_alignment, sample_assignments, sample_state_file, monkeypatch):
+    from Bio import AlignIO
+    from src import badasp_core
+
+    monkeypatch.setattr(badasp_core, "_validate_lca_coverage", lambda *args, **kwargs: None)
+
+    audit_log = temp_data_dir / "skipped_audit.log"
+    alignment = AlignIO.read(sample_alignment, "fasta")
+    assignments = pd.read_csv(sample_assignments)
+    state_data = load_state_file(sample_state_file)
+
+    results = badasp_core._compute_level_scores(
+        level="group",
+        alignment=alignment,
+        assignments=assignments,
+        ancestral_seqs={"G1": "ACDE"},
+        state_data=state_data,
+        pairs=[(1, 2)],
+        resolved_lca_nodes={"G1": "G1", "G2": "G2"},
+        reconciliation_events={},
+        audit_log_path=audit_log,
     )
-    
-    # Only pair (1,2) should be kept since (3,4) has a Speciation event
-    assert len(filtered_pairs) == 1
-    assert filtered_pairs[0] == (1, 2)
-    assert skipped == 1
-    assert skipped_spec == 1
+
+    assert results["pairwise"].empty
+    assert audit_log.exists()
+    log_text = audit_log.read_text(encoding="utf-8")
+    assert "Level: group | Skipped Pair: 1 vs 2 | Reason: Missing sequence: G2" in log_text

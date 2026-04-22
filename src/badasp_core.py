@@ -20,6 +20,8 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
+SKIPPED_AUDIT_LOG = Path("results/badasp_scoring/skipped_audit.log")
+
 
 @lru_cache(maxsize=1)
 def _get_blosum62_matrix() -> Dict[Tuple[str, str], int]:
@@ -181,6 +183,64 @@ def load_reconciliation_events(reconciliation_csv: Optional[Path]) -> Dict[str, 
     return events
 
 
+def _leaf_signature(node) -> Tuple[str, ...]:
+    return tuple(sorted(terminal.name for terminal in node.get_terminals() if terminal.name))
+
+
+def _build_named_node_signatures(tree: Tree) -> Dict[str, Tuple[str, ...]]:
+    signatures: Dict[str, Tuple[str, ...]] = {}
+    for node in tree.get_nonterminals(order="level"):
+        if not node.name:
+            continue
+        signature = _leaf_signature(node)
+        if signature:
+            signatures[str(node.name)] = signature
+    return signatures
+
+
+def _remap_reconciliation_events_to_asr_nodes(
+    reconciliation_events: Dict[str, str],
+    topology_tree: Tree,
+    asr_tree: Tree,
+) -> Dict[str, str]:
+    topology_signatures = _build_named_node_signatures(topology_tree)
+    asr_signature_to_name = {
+        signature: node_name for node_name, signature in _build_named_node_signatures(asr_tree).items()
+    }
+
+    remapped: Dict[str, str] = {}
+    unmapped_topology_nodes: List[str] = []
+
+    for topology_node_name, event_type in reconciliation_events.items():
+        topology_signature = topology_signatures.get(topology_node_name)
+        if topology_signature is None:
+            unmapped_topology_nodes.append(topology_node_name)
+            continue
+
+        asr_node_name = asr_signature_to_name.get(topology_signature)
+        if asr_node_name is None:
+            unmapped_topology_nodes.append(topology_node_name)
+            continue
+
+        previous = remapped.get(asr_node_name)
+        if previous is None:
+            remapped[asr_node_name] = event_type
+            continue
+
+        if previous != event_type:
+            remapped[asr_node_name] = "Speciation" if "Speciation" in {previous, event_type} else event_type
+
+    if unmapped_topology_nodes:
+        warnings.warn(
+            f"Unmapped reconciliation nodes: {len(unmapped_topology_nodes)}. "
+            f"Examples: {unmapped_topology_nodes[:5]}",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    return remapped
+
+
 def _filter_pairs_by_reconciliation(
     pairs: List[Tuple[int, int]],
     level_lcas: Dict[int, str],
@@ -189,18 +249,13 @@ def _filter_pairs_by_reconciliation(
     if not reconciliation_events:
         return pairs, 0, 0
 
-    # Detect node name mismatch: check if any LCA nodes match reconciliation keys
     lca_values = set(level_lcas.values())
     recon_keys = set(reconciliation_events.keys())
     matching_nodes = lca_values & recon_keys
-    
     if not matching_nodes:
-        # No matching node names → skip filter and return all pairs
-        warnings.warn(
-            f"No LCA nodes matched reconciliation keys. LCA sample: {sorted(lca_values)[:3]}, "
-            f"Recon sample: {sorted(recon_keys)[:3]}. Skipping reconciliation filter.",
-            UserWarning,
-            stacklevel=2,
+        raise ValueError(
+            f"No reconciliation node names matched ASR LCA nodes. ASR sample: {sorted(lca_values)[:3]}, "
+            f"Reconciliation sample: {sorted(recon_keys)[:3]}"
         )
         return pairs, 0, 0
 
@@ -402,6 +457,7 @@ def _compute_level_scores(
     pairs: List[Tuple[int, int]],
     resolved_lca_nodes: Dict[str, str],
     reconciliation_events: Optional[Dict[str, str]] = None,
+    audit_log_path: Optional[Path] = None,
 ) -> Dict[str, pd.DataFrame]:
     pairwise_columns = ["level", "pair", "position", "rc", "ac", "p_ac", "score"]
     id_col, lca_col = _level_columns(assignments, level)
@@ -411,6 +467,7 @@ def _compute_level_scores(
     level_grouped = assignments.groupby(id_col)
     level_sequences: Dict[int, List[str]] = {}
     level_lcas: Dict[int, str] = {}
+    audit_log_path = Path(audit_log_path) if audit_log_path is not None else SKIPPED_AUDIT_LOG
     for cluster_id, frame in tqdm(level_grouped, total=level_grouped.ngroups, desc=f"Preparing {level} clusters", unit="cluster"):
         seq_ids = frame["sequence_id"].tolist()
         level_sequences[int(cluster_id)] = [seq_dict[sid] for sid in seq_ids if sid in seq_dict]
@@ -449,11 +506,20 @@ def _compute_level_scores(
             posterior_cache[key] = extract_posterior_probability(state_data, node, site, aa)
         return posterior_cache[key]
 
+    def _log_skipped_pair(cluster_a: int, cluster_b: int, reason: str) -> None:
+        audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with audit_log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"Level: {level} | Skipped Pair: {cluster_a} vs {cluster_b} | Reason: {reason}\n")
+
     for cluster_a, cluster_b in tqdm(filtered_pairs, desc=f"Scoring {level} sister pairs", unit="pair"):
         if cluster_a not in level_sequences or cluster_b not in level_sequences:
             continue
         lca_a = level_lcas[cluster_a]
         lca_b = level_lcas[cluster_b]
+        missing_nodes = [node for node in (lca_a, lca_b) if node not in ancestral_seqs]
+        if missing_nodes:
+            _log_skipped_pair(cluster_a, cluster_b, f"Missing sequence: {', '.join(missing_nodes)}")
+            continue
         for pos in range(aln_length):
             if pos >= len(ancestral_seqs[lca_a]) or pos >= len(ancestral_seqs[lca_b]):
                 continue
@@ -558,6 +624,16 @@ def compute_multilevel_badasp_scores(
     if asr_tree_path.exists():
         asr_tree = Phylo.read(str(asr_tree_path), "newick")
 
+    if reconciliation_events:
+        asr_node_names = {node.name for node in asr_tree.get_nonterminals() if node.name}
+        if not (set(reconciliation_events) & asr_node_names):
+            remapped_reconciliation_events = _remap_reconciliation_events_to_asr_nodes(
+                reconciliation_events,
+                topology_tree,
+                asr_tree,
+            )
+            reconciliation_events = {**reconciliation_events, **remapped_reconciliation_events}
+
     filtered_by_level: Dict[str, pd.DataFrame] = {}
     level_label = {
         "group": "Groups",
@@ -579,6 +655,15 @@ def compute_multilevel_badasp_scores(
         )
 
     resolved_lca_nodes = _resolve_hierarchical_lca_nodes(assignments, asr_tree)
+
+    if reconciliation_events:
+        missing_reconciliation_nodes = [node for node in resolved_lca_nodes.values() if node not in reconciliation_events]
+        if missing_reconciliation_nodes:
+            warnings.warn(
+                f"Reconciliation remap did not cover all ASR LCA nodes. Missing examples: {missing_reconciliation_nodes[:5]}",
+                UserWarning,
+                stacklevel=2,
+            )
 
     results: Dict[str, Dict[str, object]] = {}
     hierarchical_pairs = {
@@ -606,6 +691,7 @@ def compute_multilevel_badasp_scores(
             pairs=hierarchical_pairs[level],
             resolved_lca_nodes=resolved_lca_nodes,
             reconciliation_events=reconciliation_events,
+            audit_log_path=SKIPPED_AUDIT_LOG,
         )
         results[level] = result
 
