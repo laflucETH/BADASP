@@ -64,6 +64,7 @@ scripts/explore_badasp_math.py
 
 # Agent and local instruction scratch files
 .github/instructions/*.instructions.md
+PIPELINE_STATE.md
 
 # Archived snapshot artifacts
 _archive_v1/

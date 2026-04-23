@@ -14,6 +14,7 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 - **Phase 7b (Advanced Synthesis)**: ✓ Complete — Architectural domain mapping, community extraction, taxonomic distribution
 - **Dendrogram Visualizations**: ✓ Complete & Refined — Orientation standardization, style cleanup (endpoint removal), architecture normalization
 - All development uses TDD and the root virtual environment (`venv/`). Full test suite: **89/89 passing**.
+- **Reconciliation Audit Note**: The Phase 9 reconciliation output is under active audit because taxon resolution for some inputs previously defaulted to near-all duplications; the reconciliation code now prefers the header-rich clustered FASTA and is being revalidated against tiny-tree and real-data checks.
 
 ## Methodology Summary
 
@@ -39,6 +40,20 @@ This repository implements a reproducible BADASP-inspired computational pipeline
 14. Calculate 95th percentile threshold on raw pairwise scores; identify Specificity Determining Positions (SDPs).
 15. Generate dendrogram switch-event overlays and hierarchical score distributions.
   - Dendrogram circle sizes reflect aggregated threshold-exceeding pairwise switch events at each LCA node; the per-position `switch_count` tables remain the source for summary statistics.
+
+### Reconciliation Refinement: Cluster-Expanded Fuzzy Logic
+The reconciliation stage now expands each tree leaf (CD-HIT representative at 80% identity) to the full species set in its `.clstr` cluster before classifying events.
+
+Why this is required:
+1. Representative bias: a single metagenome/environmental representative can hide many real species inside the cluster.
+2. Dense paralog families: strict binary overlap can overcall duplication in the presence of minor horizontal transfer signal.
+
+Current reconciliation policy:
+1. Cluster expansion: each leaf is assigned the union of species/taxids from all members of its CD-HIT cluster.
+2. Garbage filtering: taxa labeled metagenome/environmental/uncultured are excluded from species-set construction.
+3. Fuzzy classification: an internal node is treated as Speciation when overlap between left/right species sets is <=2 species or <5% of their union; otherwise Duplication.
+
+This preserves biological signal while preventing false duplication inflation from metadata artifacts.
 
 ### Phase 6-7: Structural & Evolutionary Analysis (Complete)
 16. Map trimmed alignment columns to PDB residue numbers; generate PyMOL/ChimeraX scripts for SDP visualization.

@@ -32,6 +32,7 @@
 - BADASP Scoring: Scoring uses the Bradley et al. (2019) subtractive formula, `Score = RC - (AC * p_ac)`.
 - Pairwise Logic: Scores are calculated exclusively between nearest sister-clades within the same parent hierarchy, avoiding global squashing.
 - SDP Definition: Specificity Determining Positions are defined by counting threshold-exceeding switches, not by raw score averaging.
+- Reconciliation Logic: Any reconciliation run MUST use CD-HIT `.clstr` cluster expansion plus fuzzy overlap classification (5% overlap tolerance or <=2 overlapping species treated as Speciation) with metagenome/environmental/uncultured taxa filtered out; do not rely on strict binary ete3 defaults alone.
 
 ## Optional Pipeline Modules (Refactor Track)
 - Alignment engine may be selected via CLI/module flag:
