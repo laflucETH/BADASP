@@ -157,29 +157,37 @@ class PDBMapper:
         top_df = df[["position", value_col]].head(top_n)
         return [(int(pos), float(val)) for pos, val in top_df.itertuples(index=False, name=None)]
 
-    def _all_switch_rows_from_csv(self, csv_path: Path) -> List[Tuple[int, float]]:
+    def _all_switch_rows_from_csv(self, csv_path: Path) -> Tuple[List[Tuple[int, float]], str]:
         """Return every mapped switch position with switch_count > 0 for a level."""
         if not csv_path.exists():
-            return []
+            return [], f"missing csv: {csv_path}"
 
-        df = pd.read_csv(csv_path)
+        try:
+            df = pd.read_csv(csv_path)
+        except pd.errors.EmptyDataError:
+            return [], f"empty csv: {csv_path}"
         if "position" not in df.columns:
-            return []
+            return [], f"missing position column: {csv_path}"
 
         if "switch_count" in df.columns:
-            df = df[df["switch_count"] > 0].copy()
+            switch_series = pd.to_numeric(df["switch_count"], errors="coerce").fillna(0.0)
+            df = df[switch_series > 0].copy()
             if "max_score" in df.columns:
                 df = df.sort_values(["switch_count", "max_score"], ascending=[False, False])
             else:
                 df = df.sort_values(["switch_count"], ascending=[False])
-            return [(int(pos), float(val)) for pos, val in df[["position", "switch_count"]].itertuples(index=False, name=None)]
+            if df.empty:
+                return [], f"no switch_count > 0 rows in {csv_path}"
+            return [(int(pos), float(val)) for pos, val in df[["position", "switch_count"]].itertuples(index=False, name=None)], ""
 
         if "max_score" in df.columns:
             df = df[df["max_score"].notna()].copy()
             df = df.sort_values(["max_score"], ascending=[False])
-            return [(int(pos), float(val)) for pos, val in df[["position", "max_score"]].itertuples(index=False, name=None)]
+            if df.empty:
+                return [], f"no finite max_score rows in {csv_path}"
+            return [(int(pos), float(val)) for pos, val in df[["position", "max_score"]].itertuples(index=False, name=None)], ""
 
-        return []
+        return [], f"no switch_count/max_score column: {csv_path}"
 
     @staticmethod
     def _switch_count_bounds(rows: Sequence[Tuple[int, float]]) -> Tuple[int, int]:
@@ -307,6 +315,7 @@ class PDBMapper:
         max_switch_count: int,
         low_hex: str,
         high_hex: str,
+        no_switch_reason: str = "",
     ) -> Path:
         """Write a publication-quality ChimeraX script for one hierarchy level."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -334,6 +343,8 @@ class PDBMapper:
             lines.append(f"# {level_label.lower()}_residues: {selector}")
         else:
             lines.append(f"# {level_label.lower()}_residues: none")
+            if no_switch_reason:
+                lines.append(f"# reason: {no_switch_reason}")
 
         output_path.write_text("\n".join(lines) + "\n")
         return output_path
@@ -377,24 +388,30 @@ class PDBMapper:
     def generate_chimerax_scripts(
         self,
         alignment_path: Path,
-        sdp_csv_groups: Path,
-        sdp_csv_families: Path,
-        sdp_csv_subfamilies: Path,
-        output_dir: Path,
+        sdp_csv_duplications: Optional[Path] = None,
+        sdp_csv_groups: Optional[Path] = None,
+        sdp_csv_families: Optional[Path] = None,
+        sdp_csv_subfamilies: Optional[Path] = None,
+        output_dir: Optional[Path] = None,
     ) -> Dict[str, Path]:
-        """Generate separate ChimeraX scripts for groups, families, and subfamilies."""
+        """Generate ChimeraX scripts for any available BADASP hierarchy outputs."""
+        if output_dir is None:
+            raise ValueError("output_dir is required")
         output_dir.mkdir(parents=True, exist_ok=True)
         pdb_path = Path(self.download_pdb())
         mapping = self.map_alignment_to_structure(alignment_path)
 
         level_specs = {
+            "duplications": (sdp_csv_duplications, "highlight_sdps_duplications.cxc"),
             "groups": (sdp_csv_groups, "highlight_sdps_groups.cxc"),
             "families": (sdp_csv_families, "highlight_sdps_families.cxc"),
             "subfamilies": (sdp_csv_subfamilies, "highlight_sdps_subfamilies.cxc"),
         }
         level_outputs: Dict[str, Path] = {}
         for level, (csv_path, filename) in level_specs.items():
-            rows = self._all_switch_rows_from_csv(csv_path)
+            if csv_path is None:
+                continue
+            rows, no_switch_reason = self._all_switch_rows_from_csv(csv_path)
             _, max_switch_count = self._switch_count_bounds(rows)
             # Intensity-based palette: 0 is represented by the gray base structure,
             # and switched residues transition from very light red to dark red.
@@ -419,6 +436,7 @@ class PDBMapper:
                 max_switch_count,
                 low_hex,
                 high_hex,
+                no_switch_reason=no_switch_reason,
             )
             self._write_switch_legend_png(
                 output_path=output_dir / f"legend_{level}.png",
@@ -434,6 +452,7 @@ class PDBMapper:
     def generate_chimerax_script(
         self,
         alignment_path: Path,
+        sdp_csv_duplications: Optional[Path],
         sdp_csv_groups: Path,
         sdp_csv_families: Path,
         sdp_csv_subfamilies: Path,
@@ -444,12 +463,13 @@ class PDBMapper:
         output_dir = output_cxc.parent
         outputs = self.generate_chimerax_scripts(
             alignment_path=alignment_path,
+            sdp_csv_duplications=sdp_csv_duplications,
             sdp_csv_groups=sdp_csv_groups,
             sdp_csv_families=sdp_csv_families,
             sdp_csv_subfamilies=sdp_csv_subfamilies,
             output_dir=output_dir,
         )
-        return outputs["families"]
+        return outputs.get("duplications", outputs.get("families", next(iter(outputs.values()))))
 
     def generate_physicochemical_chimerax_script(
         self,
@@ -600,12 +620,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     scores_dir = Path(args.scores_dir)
     alignment = Path(args.alignment)
 
+    duplications_csv = _resolve_sdp_csv(scores_dir, "duplications")
     groups_csv = _resolve_sdp_csv(scores_dir, "groups")
     families_csv = _resolve_sdp_csv(scores_dir, "families")
     subfamilies_csv = _resolve_sdp_csv(scores_dir, "subfamilies")
 
     outputs = mapper.generate_chimerax_scripts(
         alignment_path=alignment,
+        sdp_csv_duplications=duplications_csv,
         sdp_csv_groups=groups_csv,
         sdp_csv_families=families_csv,
         sdp_csv_subfamilies=subfamilies_csv,
@@ -614,10 +636,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     combined = Path(args.output_cxc)
     if combined.exists():
         combined.unlink()
-    print(
-        "Generated ChimeraX scripts: "
-        + ", ".join(str(path) for path in (outputs["groups"], outputs["families"], outputs["subfamilies"]))
-    )
+    print("Generated ChimeraX scripts: " + ", ".join(str(path) for path in outputs.values()))
 
 
 if __name__ == "__main__":

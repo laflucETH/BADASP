@@ -28,9 +28,9 @@
 - Keep `README.md` current with: project purpose, current status, methodology, and directory structure.
 
 ## Methodological Rules
-- Topological Hierarchy: The pipeline strictly uses a 3-level hierarchy (Groups, Families, Subfamilies) derived from dynamic tree cutting, not a flat structure.
+- Duplication-Directed Architecture: downstream BADASP scoring must operate on left-vs-right clades of high-confidence duplication nodes; the old Group/Family/Subfamily walk is archival only and must not be used for Phase 5 scoring.
 - BADASP Scoring: Scoring uses the Bradley et al. (2019) subtractive formula, `Score = RC - (AC * p_ac)`.
-- Pairwise Logic: Scores are calculated exclusively between nearest sister-clades within the same parent hierarchy, avoiding global squashing.
+- Pairwise Logic: Scores are calculated exclusively between the immediate left and right clades of each retained duplication node, with both sides required to meet the minimum clade-size threshold.
 - SDP Definition: Specificity Determining Positions are defined by counting threshold-exceeding switches, not by raw score averaging.
 - Reconciliation Logic: Any reconciliation run MUST use CD-HIT `.clstr` cluster expansion plus fuzzy overlap classification (5% overlap tolerance or <=2 overlapping species treated as Speciation) with metagenome/environmental/uncultured taxa filtered out; do not rely on strict binary ete3 defaults alone.
 

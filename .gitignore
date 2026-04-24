@@ -1,6 +1,7 @@
 # Generated results directory — completely ignored, no exceptions
 # Never force-add anything under results/.
 results/
+archive_pre_MAD_results/
 
 # Python environments and caches
 venv/
