@@ -7,6 +7,7 @@ from src.evolutionary_analysis import (
     _collect_architecture_switch_values,
     _load_switch_events_from_duplications,
     _load_switch_events_for_level,
+    _remap_named_nodes_to_plot_tree,
     _plot_architecture_boxplot,
     _plot_master_dendrogram,
     assign_coevolution_communities,
@@ -274,3 +275,45 @@ def test_load_switch_events_from_duplications_uses_lca_node_names(tmp_path: Path
     assert events["level"].eq("duplications").all()
     assert events["branch_id"].eq("N2").all()
     assert (events["root_distance"] > 0.0).all()
+
+
+def test_load_switch_events_from_duplications_maps_named_asr_nodes_to_nameless_tree(tmp_path: Path) -> None:
+    tree_path = tmp_path / "mad_rooted.tree"
+    reference_tree_path = tmp_path / "asr_run.treefile"
+    pairwise_path = tmp_path / "raw_pairwise_duplications.csv"
+
+    tree_path.write_text("((A:0.1,B:0.1):0.2,(C:0.1,D:0.1):0.2);\n", encoding="utf-8")
+    reference_tree_path.write_text("((A:0.1,B:0.1)Node11:0.2,(C:0.1,D:0.1)Node22:0.2)NodeRoot;\n", encoding="utf-8")
+    pd.DataFrame(
+        {
+            "pair": ["Node11_L-Node11_R"] * 5,
+            "position": [10, 11, 12, 13, 14],
+            "score": [0.1, 0.2, 0.3, 0.4, 1.8],
+            "duplication_node": ["Node11", "Node11", "Node11", "Node11", "Node11"],
+        }
+    ).to_csv(pairwise_path, index=False)
+
+    events = _load_switch_events_from_duplications(
+        tree_path=tree_path,
+        raw_pairwise_path=pairwise_path,
+        named_tree_path=reference_tree_path,
+    )
+
+    assert not events.empty
+    assert events["branch_id"].str.startswith("InternalNode_").all()
+    assert events["root_distance"].notna().all()
+
+
+def test_remap_named_nodes_to_plot_tree_matches_by_leaf_signature(tmp_path: Path) -> None:
+    from Bio import Phylo
+
+    plot_tree_path = tmp_path / "plot.tree"
+    named_tree_path = tmp_path / "named.tree"
+    plot_tree_path.write_text("((A:0.1,B:0.1):0.2,(C:0.1,D:0.1):0.2);\n", encoding="utf-8")
+    named_tree_path.write_text("((A:0.1,B:0.1)NodeAB:0.2,(C:0.1,D:0.1)NodeCD:0.2)NodeRoot;\n", encoding="utf-8")
+
+    plot_tree = Phylo.read(str(plot_tree_path), "newick")
+    mapping = _remap_named_nodes_to_plot_tree(plot_tree=plot_tree, named_tree_path=named_tree_path)
+
+    assert "NodeAB" in mapping
+    assert mapping["NodeAB"].startswith("InternalNode_")

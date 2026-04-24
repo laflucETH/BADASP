@@ -403,6 +403,43 @@ def _ensure_tree_node_names(tree: Tree) -> None:
             node.name = f"InternalNode_{idx}"
 
 
+def _leaf_signature(node: Clade) -> Tuple[str, ...]:
+    return tuple(sorted(str(terminal.name) for terminal in node.get_terminals() if terminal.name))
+
+
+def _remap_named_nodes_to_plot_tree(
+    plot_tree: Tree,
+    named_tree_path: Optional[Path],
+) -> Dict[str, str]:
+    _ensure_tree_node_names(plot_tree)
+    if named_tree_path is None or not named_tree_path.exists():
+        return {}
+
+    named_tree = Phylo.read(str(named_tree_path), "newick")
+    _ensure_tree_node_names(named_tree)
+
+    named_signatures: Dict[Tuple[str, ...], str] = {}
+    for node in named_tree.get_nonterminals(order="level"):
+        if not node.name:
+            continue
+        signature = _leaf_signature(node)
+        if signature:
+            named_signatures[signature] = str(node.name)
+
+    plot_signature_to_name = {
+        _leaf_signature(node): str(node.name)
+        for node in plot_tree.get_nonterminals(order="level")
+        if node.name
+    }
+
+    remap: Dict[str, str] = {}
+    for signature, source_name in named_signatures.items():
+        mapped_name = plot_signature_to_name.get(signature)
+        if mapped_name:
+            remap[source_name] = mapped_name
+    return remap
+
+
 def _build_y_positions(tree: Tree) -> Dict[Clade, float]:
     terminals = tree.get_terminals()
     y_positions: Dict[Clade, float] = {leaf: float(i) for i, leaf in enumerate(reversed(terminals), start=1)}
@@ -549,8 +586,19 @@ def generate_duplication_tree_switch_plot(
     rooted_tree_path: Path,
     raw_pairwise_duplications: Path,
     output_svg: Path,
+    reference_asr_tree_path: Optional[Path] = Path("data/interim/asr_run.treefile"),
 ) -> None:
     node_switch_map = build_duplication_switch_node_map(raw_pairwise_duplications)
+
+    plot_tree = Phylo.read(str(rooted_tree_path), "newick")
+    _ensure_tree_node_names(plot_tree)
+    asr_to_plot_name = _remap_named_nodes_to_plot_tree(plot_tree, named_tree_path=reference_asr_tree_path)
+    if asr_to_plot_name:
+        remapped_counts: Dict[str, int] = defaultdict(int)
+        for node_name, count in node_switch_map.items():
+            remapped_counts[asr_to_plot_name.get(str(node_name), str(node_name))] += int(count)
+        node_switch_map = dict(remapped_counts)
+
     plot_tree_with_switches(
         tree_path=rooted_tree_path,
         node_switch_counts=node_switch_map,

@@ -380,3 +380,34 @@ def test_build_duplication_switch_node_map_counts_lca_threshold_events(tmp_path:
 
     assert sum(node_switches.values()) == 1
     assert node_switches["N2"] == 1
+
+
+def test_generate_duplication_tree_switch_plot_remaps_asr_nodes_on_nameless_tree(tmp_path: Path) -> None:
+    from src.visualization import generate_duplication_tree_switch_plot
+
+    tree_path = tmp_path / "mad_rooted.tree"
+    reference_tree_path = tmp_path / "asr_run.treefile"
+    pairwise = tmp_path / "raw_pairwise_duplications.csv"
+    out_svg = tmp_path / "tree_switches_duplications.svg"
+
+    tree_path.write_text("((A:0.1,B:0.1):0.2,(C:0.1,D:0.1):0.2);\n", encoding="utf-8")
+    reference_tree_path.write_text("((A:0.1,B:0.1)Node11:0.2,(C:0.1,D:0.1)Node22:0.2)NodeRoot;\n", encoding="utf-8")
+    pd.DataFrame(
+        {
+            "pair": ["Node11_L-Node11_R"] * 5,
+            "position": [1, 2, 3, 4, 5],
+            "score": [0.1, 0.2, 0.3, 0.4, 5.0],
+            "duplication_node": ["Node11"] * 5,
+        }
+    ).to_csv(pairwise, index=False)
+
+    generate_duplication_tree_switch_plot(
+        rooted_tree_path=tree_path,
+        raw_pairwise_duplications=pairwise,
+        output_svg=out_svg,
+        reference_asr_tree_path=reference_tree_path,
+    )
+
+    svg_text = out_svg.read_text(encoding="utf-8")
+    assert out_svg.exists()
+    assert "Switch count" in svg_text

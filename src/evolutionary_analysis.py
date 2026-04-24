@@ -17,6 +17,7 @@ import seaborn as sns
 from Bio import Phylo, SeqIO
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from Bio.PDB import PDBParser
+from Bio.Phylo.BaseTree import Clade, Tree
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import pdist, squareform
 
@@ -36,6 +37,47 @@ def _ensure_node_names(tree) -> None:
     for idx, node in enumerate(tree.get_nonterminals(order="preorder"), start=1):
         if not node.name:
             node.name = f"InternalNode_{idx}"
+
+
+def _leaf_signature(node: Clade) -> Tuple[str, ...]:
+    return tuple(sorted(str(terminal.name) for terminal in node.get_terminals() if terminal.name))
+
+
+def _build_signature_to_named_node(tree: Tree) -> Dict[Tuple[str, ...], str]:
+    signatures: Dict[Tuple[str, ...], str] = {}
+    for node in tree.get_nonterminals(order="level"):
+        if not node.name:
+            continue
+        signature = _leaf_signature(node)
+        if signature:
+            signatures[signature] = str(node.name)
+    return signatures
+
+
+def _remap_named_nodes_to_plot_tree(
+    plot_tree: Tree,
+    named_tree_path: Optional[Path],
+) -> Dict[str, str]:
+    _ensure_node_names(plot_tree)
+    if named_tree_path is None or not named_tree_path.exists():
+        return {}
+
+    named_tree = Phylo.read(str(named_tree_path), "newick")
+    _ensure_node_names(named_tree)
+    named_signatures = _build_signature_to_named_node(named_tree)
+
+    plot_signature_to_name = {
+        _leaf_signature(node): str(node.name)
+        for node in plot_tree.get_nonterminals(order="level")
+        if node.name
+    }
+
+    remap: Dict[str, str] = {}
+    for signature, source_name in named_signatures.items():
+        mapped_name = plot_signature_to_name.get(signature)
+        if mapped_name:
+            remap[source_name] = mapped_name
+    return remap
 
 
 def calculate_lca_depth(tree_path: Path, member_names: Sequence[str]) -> float:
@@ -449,7 +491,9 @@ def _plot_master_dendrogram(
     ax.set_xticks([])
     ax.invert_yaxis()
     ax.set_title("Master Dendrogram with BADASP Switch Events")
-    ax.legend(title="Event Source", loc="upper left")
+    handles, labels = ax.get_legend_handles_labels()
+    if handles and labels:
+        ax.legend(title="Event Source", loc="upper left")
     fig.tight_layout()
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_svg, format="svg")
@@ -646,6 +690,7 @@ def _load_switch_events_for_level(
 def _load_switch_events_from_duplications(
     tree_path: Path,
     raw_pairwise_path: Path,
+    named_tree_path: Optional[Path] = Path("data/interim/asr_run.treefile"),
 ) -> pd.DataFrame:
     tree = Phylo.read(str(tree_path), "newick")
     _ensure_node_names(tree)
@@ -675,18 +720,37 @@ def _load_switch_events_from_duplications(
             f"Missing required duplication LCA column in {raw_pairwise_path}: one of ['lca_node_name', 'lca_node_id', 'duplication_node']"
         )
 
+    asr_to_plot_name = _remap_named_nodes_to_plot_tree(tree, named_tree_path=named_tree_path)
+    named_depths: Dict[str, float] = {}
+    if named_tree_path is not None and named_tree_path.exists():
+        named_tree = Phylo.read(str(named_tree_path), "newick")
+        _ensure_node_names(named_tree)
+        source_depths = named_tree.depths()
+        if not max(source_depths.values()):
+            source_depths = named_tree.depths(unit_branch_lengths=True)
+        named_depths = {
+            str(clade.name): float(source_depths.get(clade, np.nan))
+            for clade in named_tree.find_clades()
+            if clade.name
+        }
+
     node_by_name = {str(clade.name): clade for clade in tree.find_clades() if clade.name}
     rows: List[dict] = []
     for _, row in switched.iterrows():
-        branch_id = str(row[node_column])
+        source_branch_id = str(row[node_column])
+        branch_id = asr_to_plot_name.get(source_branch_id, source_branch_id)
         clade = node_by_name.get(branch_id)
-        root_distance = float(depths.get(clade, np.nan)) if clade is not None else float("nan")
+        if clade is not None:
+            root_distance = float(depths.get(clade, np.nan))
+        else:
+            root_distance = float(named_depths.get(source_branch_id, np.nan))
         rows.append(
             {
                 "level": DUPLICATION_LEVEL,
                 "pair": str(row["pair"]),
                 "position": int(row["position"]),
                 "score": float(row["score"]),
+                "source_branch_id": source_branch_id,
                 "branch_id": branch_id,
                 "root_distance": root_distance,
             }
@@ -971,6 +1035,7 @@ def run_phase7_analyses(
     pdb_path: Path,
     output_dir: Path,
     assignments_path: Optional[Path] = None,
+    reference_asr_tree_path: Optional[Path] = Path("data/interim/asr_run.treefile"),
     pdb_id: str = "2cg4",
 ) -> Dict[str, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1004,6 +1069,7 @@ def run_phase7_analyses(
         DUPLICATION_LEVEL: _load_switch_events_from_duplications(
             tree_path=tree_path,
             raw_pairwise_path=raw_pairwise_duplications,
+            named_tree_path=reference_asr_tree_path,
         )
     }
     score_by_level: Dict[str, pd.DataFrame] = {
@@ -1209,6 +1275,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--msa", default="data/interim/IPR019888_trimmed.aln")
     parser.add_argument("--ancestral", default="data/interim/ancestral_sequences.fasta")
     parser.add_argument("--asr-map", default="results/topological_clustering/tree_clusters_asr_mapped.csv")
+    parser.add_argument("--reference-asr-tree", default="data/interim/asr_run.treefile")
     parser.add_argument("--domain-architecture", default="data/domain_architecture.json")
     parser.add_argument("--pdb", default="data/raw/2cg4.pdb")
     parser.add_argument("--pdb-id", default="2cg4")
@@ -1229,6 +1296,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         pdb_path=Path(args.pdb),
         output_dir=Path(args.output_dir),
         assignments_path=Path(args.assignments) if args.assignments else None,
+        reference_asr_tree_path=Path(args.reference_asr_tree) if args.reference_asr_tree else None,
         pdb_id=str(args.pdb_id),
     )
     for label, path in outputs.items():
