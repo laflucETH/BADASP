@@ -1,3 +1,6 @@
+# Generated results directory — completely ignored, no exceptions
+results/
+
 # Python environments and caches
 venv/
 .venv/
@@ -26,21 +29,6 @@ data/processed/**
 !data/raw/.gitkeep
 !data/interim/.gitkeep
 !data/processed/.gitkeep
-
-# Generated results
-results/**
-results_clustered/**
-
-# Keep result root scaffold tracked
-!results/.gitkeep
-!results/sequence_filtering/
-!results/alignment_qc/
-!results/topological_clustering/
-!results/badasp_scoring/
-!results/sequence_filtering/.gitkeep
-!results/alignment_qc/.gitkeep
-!results/topological_clustering/.gitkeep
-!results/badasp_scoring/.gitkeep
 
 # Exploratory and test scripts (not part of production pipeline)
 src/data_fetcher.py
