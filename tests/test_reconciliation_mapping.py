@@ -4,6 +4,7 @@ import csv
 from ete3 import PhyloTree
 
 from src.reconciliation import (
+    _is_garbage_taxonomy,
     classify_fuzzy_event,
     load_alignment_taxa,
     load_cluster_expanded_leaf_species,
@@ -136,3 +137,21 @@ def test_classify_fuzzy_event_thresholds() -> None:
     assert classify_fuzzy_event({"1", "2", "3"}, {"4", "5"}) == "Speciation"
     assert classify_fuzzy_event({"1", "2", "3"}, {"2", "3", "4"}) == "Speciation"
     assert classify_fuzzy_event({str(i) for i in range(100)}, {str(i) for i in range(50, 150)}) == "Duplication"
+
+
+def test_strict_garbage_taxonomy_terms_only() -> None:
+    # Strict bucket terms should be filtered.
+    assert _is_garbage_taxonomy("marine metagenome")
+    assert _is_garbage_taxonomy("environmental sample")
+    assert _is_garbage_taxonomy("mixed culture")
+    assert _is_garbage_taxonomy("enrichment culture")
+    assert _is_garbage_taxonomy("uncultured bacterium")
+    assert _is_garbage_taxonomy("unidentified")
+
+
+def test_valid_named_taxa_are_not_filtered() -> None:
+    # Valid named taxa and isolate labels should remain usable for reconciliation.
+    assert not _is_garbage_taxonomy("Candidatus Erwinia haradaeae")
+    assert not _is_garbage_taxonomy("Acerihabitans sp. KWT182")
+    assert not _is_garbage_taxonomy("uncultured Poseidoniia archaeon")
+    assert not _is_garbage_taxonomy("Alphaproteobacteria bacterium")

@@ -10,13 +10,15 @@ from Bio import Phylo, SeqIO
 
 _OX_PATTERN = re.compile(r"\bOX=(\d+)\b")
 _OS_PATTERN = re.compile(r"\bOS=([^=]+?)(?=\s[A-Z]{2}=|$)")
-# Expanded environmental/unresolved taxonomy filtering
-# Catches: metagenome, environmental, uncultured, unidentified, mixed, enrichment,
-# bacterium, marine, soil, water, sludge, sp., gen., and unresolved/generic patterns
+# Strict environmental/unresolved taxonomy filtering.
+# Keep valid named taxa (including Candidatus and isolate "sp." designations).
 _GARBAGE_TAXON_PATTERN = re.compile(
-    r"metagenome|environmental|uncultured|unidentified|mixed|enrichment|"
-    r"\bbacterium\b|\bmarine\b|\bsoil\b|\bwater\b|\bsludge\b|"
-    r"\bsp\b|\bsp\.|gen\.|candidatus",
+    r"metagenome|"
+    r"environmental\s+sample|"
+    r"unidentified|"
+    r"mixed\s+culture|"
+    r"enrichment\s+culture|"
+    r"uncultured\s+bacterium",
     re.IGNORECASE
 )
 

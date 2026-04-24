@@ -1,4 +1,5 @@
 # Generated results directory — completely ignored, no exceptions
+# Never force-add anything under results/.
 results/
 
 # Python environments and caches
