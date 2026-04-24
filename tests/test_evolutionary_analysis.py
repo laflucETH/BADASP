@@ -5,6 +5,8 @@ import pandas as pd
 
 from src.evolutionary_analysis import (
     _collect_architecture_switch_values,
+    _load_switch_events_from_duplications,
+    _load_switch_events_for_level,
     _plot_architecture_boxplot,
     _plot_master_dendrogram,
     assign_coevolution_communities,
@@ -209,3 +211,66 @@ def test_plot_master_dendrogram_exports_svg(tmp_path: Path) -> None:
 
     assert output_svg.exists()
     assert output_svg.stat().st_size > 0
+
+
+def test_load_switch_events_uses_unit_branch_depth_when_lengths_missing(tmp_path: Path) -> None:
+    tree_path = tmp_path / "toy.tree"
+    assignments_path = tmp_path / "assignments.csv"
+    pairwise_path = tmp_path / "raw_pairwise_groups.csv"
+
+    tree_path.write_text("((A,B)N1,(C,D)N2)Root;\n", encoding="utf-8")
+    pd.DataFrame(
+        {
+            "sequence_id": ["A", "B", "C", "D"],
+            "group_id": [1, 2, 3, 4],
+            "group_lca_node": ["A", "B", "C", "D"],
+            "family_id": [10, 10, 20, 20],
+            "family_lca_node": ["N1", "N1", "N2", "N2"],
+            "subfamily_id": [100, 100, 200, 200],
+            "subfamily_lca_node": ["N1", "N1", "N2", "N2"],
+        }
+    ).to_csv(assignments_path, index=False)
+    pd.DataFrame(
+        {
+            "pair": ["1-2", "1-2", "1-2", "1-2"],
+            "position": [10, 11, 12, 13],
+            "score": [0.1, 0.2, 0.3, 1.0],
+        }
+    ).to_csv(pairwise_path, index=False)
+
+    events = _load_switch_events_for_level(
+        tree_path=tree_path,
+        assignments_path=assignments_path,
+        raw_pairwise_path=pairwise_path,
+        level="groups",
+    )
+
+    assert not events.empty
+    assert events["branch_id"].nunique() == 1
+    assert events["branch_id"].iloc[0] == "N1"
+    assert (events["root_distance"] > 0.0).all()
+
+
+def test_load_switch_events_from_duplications_uses_lca_node_names(tmp_path: Path) -> None:
+    tree_path = tmp_path / "toy.tree"
+    pairwise_path = tmp_path / "raw_pairwise_duplications.csv"
+
+    tree_path.write_text("((A:0.1,B:0.1)N1:0.2,(C:0.1,D:0.1)N2:0.2)Root;\n", encoding="utf-8")
+    pd.DataFrame(
+        {
+            "pair": ["Node1_L-Node1_R"] * 5,
+            "position": [10, 11, 12, 13, 14],
+            "score": [0.1, 0.2, 0.3, 0.4, 1.8],
+            "lca_node_name": ["N1", "N1", "N2", "N2", "N2"],
+        }
+    ).to_csv(pairwise_path, index=False)
+
+    events = _load_switch_events_from_duplications(
+        tree_path=tree_path,
+        raw_pairwise_path=pairwise_path,
+    )
+
+    assert not events.empty
+    assert events["level"].eq("duplications").all()
+    assert events["branch_id"].eq("N2").all()
+    assert (events["root_distance"] > 0.0).all()

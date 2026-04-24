@@ -22,6 +22,24 @@
 - Current pooled SDP threshold: `1.478707`
 - Current duplication-pair yield: `160`
 
+## Downstream Duplication Refactor Checkpoint (2026-04-24)
+- Refactored downstream plotting and evolutionary modules to consume duplication-directed Phase 5 outputs instead of Group/Family/Subfamily score tables.
+- `src/visualization.py` now exposes duplication-directed plotting utilities for:
+  - score distribution (`badasp_score_distribution_duplications.svg`)
+  - switch counts (`switch_counts_duplications.svg`)
+  - tree/dendrogram switch overlays from duplication-node events
+- `src/evolutionary_analysis.py` now defaults to:
+  - `results/badasp_scoring/raw_pairwise_duplications.csv`
+  - `results/badasp_scoring/badasp_scores_duplications.csv`
+  - continuous Tree Depth timelines derived directly from duplication node placements on the rooted tree
+- `scripts/regenerate_stale_plots.py` regenerated stale BADASP/evolutionary artifacts from duplication outputs and added guards for missing legacy hierarchy files.
+- Validation status:
+  - Focused tests: `tests/test_visualization.py` + `tests/test_evolutionary_analysis.py` passed
+  - Full suite: `105/105` passed
+  - Regeneration commands completed:
+    - `PYTHONPATH=. venv/bin/python src/evolutionary_analysis.py --tree results/topological_clustering/mad_rooted.tree --output-dir results/evolutionary_analysis`
+    - `PYTHONPATH=. venv/bin/python scripts/regenerate_stale_plots.py`
+
 ## Monday Completion Milestone (2026-04-20)
 - **Phase 3 (Clustering):** Verified existing MAD-rooted tree from weekend (1.2MB, 21,641+ sequences, valid Newick format). Skipped re-clustering to save time. Tree confirmed: `results/topological_clustering/mad_rooted.tree`
 - **Phase 4 (ASR):** Ancestral sequences pre-extracted and verified at `data/interim/ancestral_sequences.fasta` (29KB, 576 lines representing hierarchical LCA nodes).

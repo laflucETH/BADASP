@@ -4,6 +4,7 @@ import pandas as pd
 from scipy.cluster.hierarchy import linkage
 
 from src.visualization import (
+    _compute_95th_threshold,
     default_plot_paths,
     compute_gap_percentages,
     plot_gap_percentage_per_column,
@@ -312,3 +313,70 @@ def test_plot_topological_tree_dendrogram_keeps_level_color(tmp_path: Path) -> N
     assert out_svg.exists()
     assert "#1f77b4" in svg_text or "rgb(31, 119, 180)" in svg_text
     assert "branch length from root" in svg_text
+
+
+def test_compute_95th_threshold_isolated_per_level() -> None:
+    groups = _compute_95th_threshold([0.01, 0.02, 0.03, 0.04])
+    families = _compute_95th_threshold([0.1, 0.2, 0.3, 0.4])
+    subfamilies = _compute_95th_threshold([1.0, 2.0, 3.0, 4.0])
+
+    assert groups != families
+    assert families != subfamilies
+    assert groups != subfamilies
+
+
+def test_plot_duplication_distributions_and_switches_write_svg(tmp_path: Path) -> None:
+    from src.visualization import (
+        plot_duplication_badasp_distribution,
+        plot_duplication_switch_counts,
+    )
+
+    pairwise = tmp_path / "raw_pairwise_duplications.csv"
+    scores = tmp_path / "badasp_scores_duplications.csv"
+    dist_svg = tmp_path / "badasp_score_distribution_duplications.svg"
+    switch_svg = tmp_path / "switch_counts_duplications.svg"
+
+    pd.DataFrame(
+        {
+            "pair": ["Node1_L-Node1_R"] * 4,
+            "position": [1, 2, 3, 4],
+            "score": [0.1, 0.2, 0.3, 1.8],
+            "lca_node_name": ["N1"] * 4,
+        }
+    ).to_csv(pairwise, index=False)
+
+    pd.DataFrame(
+        {
+            "position": [1, 2, 3, 4],
+            "switch_count": [0, 1, 2, 1],
+            "global_threshold": [1.0, 1.0, 1.0, 1.0],
+            "badasp_score": [0.0, 0.5, 1.2, 0.7],
+        }
+    ).to_csv(scores, index=False)
+
+    plot_duplication_badasp_distribution(pairwise, dist_svg)
+    plot_duplication_switch_counts(scores, switch_svg)
+
+    assert dist_svg.exists()
+    assert dist_svg.stat().st_size > 0
+    assert switch_svg.exists()
+    assert switch_svg.stat().st_size > 0
+
+
+def test_build_duplication_switch_node_map_counts_lca_threshold_events(tmp_path: Path) -> None:
+    from src.visualization import build_duplication_switch_node_map
+
+    pairwise = tmp_path / "raw_pairwise_duplications.csv"
+    pd.DataFrame(
+        {
+            "pair": ["Node1_L-Node1_R"] * 5,
+            "position": [1, 2, 3, 4, 5],
+            "score": [0.1, 0.2, 0.3, 0.4, 5.0],
+            "lca_node_name": ["N1", "N1", "N2", "N2", "N2"],
+        }
+    ).to_csv(pairwise, index=False)
+
+    node_switches = build_duplication_switch_node_map(pairwise)
+
+    assert sum(node_switches.values()) == 1
+    assert node_switches["N2"] == 1

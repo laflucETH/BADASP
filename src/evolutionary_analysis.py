@@ -24,6 +24,7 @@ from src.pdb_mapper import PDBMapper
 
 
 LEVELS = ["groups", "families", "subfamilies"]
+DUPLICATION_LEVEL = "duplications"
 LEVEL_MAP = {
     "groups": "group",
     "families": "family",
@@ -282,20 +283,34 @@ def _plot_clustered_heatmap(
 
 def _plot_switch_timeline(events_df: pd.DataFrame, output_svg: Path) -> None:
     output_svg.parent.mkdir(parents=True, exist_ok=True)
-    palette = {"groups": "#1F77B4", "families": "#D95F02", "subfamilies": "#2CA02C"}
+    palette = {
+        "groups": "#1F77B4",
+        "families": "#D95F02",
+        "subfamilies": "#2CA02C",
+        DUPLICATION_LEVEL: "#B24A2A",
+    }
 
     plt.figure(figsize=(11, 6))
-    sns.histplot(
-        data=events_df,
-        x="root_distance",
-        hue="level",
-        bins=40,
-        stat="count",
-        element="step",
-        fill=False,
-        common_bins=True,
-        palette=palette,
-    )
+    if "level" in events_df.columns and events_df["level"].nunique() > 1:
+        sns.histplot(
+            data=events_df,
+            x="root_distance",
+            hue="level",
+            bins=40,
+            stat="count",
+            element="step",
+            fill=False,
+            common_bins=True,
+            palette=palette,
+        )
+    else:
+        sns.histplot(
+            data=events_df,
+            x="root_distance",
+            bins=40,
+            stat="count",
+            color=palette[DUPLICATION_LEVEL],
+        )
     plt.xlabel("Distance from Root")
     plt.ylabel("Switch Frequency")
     plt.title("Evolutionary Timeline of BADASP Switch Events")
@@ -347,11 +362,13 @@ def _plot_master_dendrogram(
         "groups": "#1F77B4",
         "families": "#D95F02",
         "subfamilies": "#2CA02C",
+        DUPLICATION_LEVEL: "#B24A2A",
     }
     level_labels = {
         "groups": "Groups",
         "families": "Families",
         "subfamilies": "Subfamilies",
+        DUPLICATION_LEVEL: "Duplications",
     }
 
     node_by_name = {str(clade.name): clade for clade in tree.find_clades() if clade.name}
@@ -378,7 +395,26 @@ def _plot_master_dendrogram(
 
     max_switch = max(all_switch_counts) if all_switch_counts else 1.0
 
-    for level, grouped in grouped_by_level.items():
+    # Draw denser points first, then broader categories on top.
+    preferred_order = ["subfamilies", "families", "groups", DUPLICATION_LEVEL]
+    level_order = [level for level in preferred_order if level in grouped_by_level]
+    level_order.extend([level for level in grouped_by_level if level not in level_order])
+    style_map = {
+        "subfamilies": {"marker": "o", "alpha": 0.75, "filled": True, "zorder": 3, "base": 28.0, "scale": 180.0},
+        "families": {"marker": "o", "alpha": 0.95, "filled": False, "zorder": 4, "base": 40.0, "scale": 220.0},
+        "groups": {"marker": "s", "alpha": 1.0, "filled": False, "zorder": 5, "base": 52.0, "scale": 260.0},
+        DUPLICATION_LEVEL: {"marker": "o", "alpha": 0.9, "filled": True, "zorder": 4, "base": 34.0, "scale": 220.0},
+    }
+
+    for level in level_order:
+        grouped = grouped_by_level.get(level)
+        if grouped is None or grouped.empty:
+            continue
+
+        style = style_map.get(
+            level,
+            {"marker": "o", "alpha": 0.9, "filled": True, "zorder": 4, "base": 34.0, "scale": 220.0},
+        )
         x_vals: List[float] = []
         y_vals: List[float] = []
         sizes: List[float] = []
@@ -390,7 +426,7 @@ def _plot_master_dendrogram(
             clade = node_by_name[branch_id]
             x_vals.append(float(x_pos[clade]))
             y_vals.append(float(depths[clade]))
-            sizes.append(40.0 + 260.0 * (float(row["switch_count"]) / float(max_switch)))
+            sizes.append(float(style["base"]) + float(style["scale"]) * (float(row["switch_count"]) / float(max_switch)))
 
         if not x_vals:
             continue
@@ -399,20 +435,21 @@ def _plot_master_dendrogram(
             x_vals,
             y_vals,
             s=sizes,
-            c=level_colors.get(level, "#444444"),
-            alpha=0.85,
-            linewidths=0.4,
-            edgecolors="black",
+            c=level_colors.get(level, "#444444") if style["filled"] else "none",
+            alpha=float(style["alpha"]),
+            linewidths=1.1,
+            edgecolors=level_colors.get(level, "#444444"),
+            marker=str(style["marker"]),
             label=level_labels.get(level, level),
-            zorder=3,
+            zorder=int(style["zorder"]),
         )
 
     ax.set_xlabel("Taxa / internal nodes")
     ax.set_ylabel("Branch length from root")
     ax.set_xticks([])
     ax.invert_yaxis()
-    ax.set_title("Master Dendrogram with Multi-level BADASP Switch Events")
-    ax.legend(title="Hierarchy Level", loc="upper left")
+    ax.set_title("Master Dendrogram with BADASP Switch Events")
+    ax.legend(title="Event Source", loc="upper left")
     fig.tight_layout()
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_svg, format="svg")
@@ -555,11 +592,21 @@ def _load_switch_events_for_level(
     raw_pairwise_path: Path,
     level: str,
 ) -> pd.DataFrame:
+    if level == DUPLICATION_LEVEL:
+        return _load_switch_events_from_duplications(
+            tree_path=tree_path,
+            raw_pairwise_path=raw_pairwise_path,
+        )
+
     singular = LEVEL_MAP[level]
     id_col = f"{singular}_id"
 
     tree = Phylo.read(str(tree_path), "newick")
     _ensure_node_names(tree)
+    depths = tree.depths()
+    if not max(depths.values()):
+        depths = tree.depths(unit_branch_lengths=True)
+
     assignments = pd.read_csv(assignments_path)
     cluster_members = assignments.groupby(id_col)["sequence_id"].apply(list).to_dict()
 
@@ -581,7 +628,7 @@ def _load_switch_events_for_level(
 
         members = list(cluster_members[left_id]) + list(cluster_members[right_id])
         lca = tree.common_ancestor(members)
-        depth = float(tree.distance(tree.root, lca))
+        depth = float(depths.get(lca, 0.0))
         rows.append(
             {
                 "level": level,
@@ -594,6 +641,66 @@ def _load_switch_events_for_level(
         )
 
     return pd.DataFrame(rows)
+
+
+def _load_switch_events_from_duplications(
+    tree_path: Path,
+    raw_pairwise_path: Path,
+) -> pd.DataFrame:
+    tree = Phylo.read(str(tree_path), "newick")
+    _ensure_node_names(tree)
+    depths = tree.depths()
+    if not max(depths.values()):
+        depths = tree.depths(unit_branch_lengths=True)
+
+    raw = pd.read_csv(raw_pairwise_path)
+    required = {"pair", "position", "score"}
+    missing = required - set(raw.columns)
+    if missing:
+        raise ValueError(f"Missing required columns in {raw_pairwise_path}: {sorted(missing)}")
+
+    if raw.empty:
+        return pd.DataFrame(columns=["level", "pair", "position", "score", "branch_id", "root_distance"])
+
+    threshold = float(np.percentile(raw["score"].astype(float), 95))
+    switched = raw[raw["score"] > threshold].copy()
+
+    node_column = None
+    for candidate in ("lca_node_name", "lca_node_id", "duplication_node"):
+        if candidate in switched.columns:
+            node_column = candidate
+            break
+    if node_column is None:
+        raise ValueError(
+            f"Missing required duplication LCA column in {raw_pairwise_path}: one of ['lca_node_name', 'lca_node_id', 'duplication_node']"
+        )
+
+    node_by_name = {str(clade.name): clade for clade in tree.find_clades() if clade.name}
+    rows: List[dict] = []
+    for _, row in switched.iterrows():
+        branch_id = str(row[node_column])
+        clade = node_by_name.get(branch_id)
+        root_distance = float(depths.get(clade, np.nan)) if clade is not None else float("nan")
+        rows.append(
+            {
+                "level": DUPLICATION_LEVEL,
+                "pair": str(row["pair"]),
+                "position": int(row["position"]),
+                "score": float(row["score"]),
+                "branch_id": branch_id,
+                "root_distance": root_distance,
+            }
+        )
+
+    events = pd.DataFrame(rows)
+    if events.empty:
+        return events
+    if events["root_distance"].isna().any():
+        depth_fallback = tree.depths(unit_branch_lengths=True)
+        events["root_distance"] = events["branch_id"].map(
+            lambda x: float(depth_fallback.get(node_by_name.get(str(x)), np.nan))
+        )
+    return events
 
 
 def _consensus_sequence(msa_path: Path) -> str:
@@ -720,6 +827,9 @@ def _compute_level_physicochemical_shifts(
     consensus: str,
     tu_tools: List[str],
 ) -> pd.DataFrame:
+    if level not in LEVEL_MAP:
+        return pd.DataFrame()
+
     singular = LEVEL_MAP[level]
     id_col = f"{singular}_id"
     lca_col = f"{singular}_lca_node"
@@ -802,6 +912,9 @@ def _collect_taxonomic_distribution(
     top_positions: Sequence[int],
     alignment_records: Dict[str, str],
 ) -> pd.DataFrame:
+    if level not in LEVEL_MAP:
+        return pd.DataFrame()
+
     rows: List[dict] = []
     singular = LEVEL_MAP[level]
     id_col = f"{singular}_id"
@@ -849,45 +962,34 @@ def _collect_taxonomic_distribution(
 
 def run_phase7_analyses(
     tree_path: Path,
-    assignments_path: Path,
-    raw_pairwise_groups: Path,
-    raw_pairwise_families: Path,
-    raw_pairwise_subfamilies: Path,
-    groups_scores_path: Path,
-    family_scores_path: Path,
-    subfamily_scores_path: Path,
+    raw_pairwise_duplications: Path,
+    duplication_scores_path: Path,
     msa_path: Path,
     ancestral_fasta_path: Path,
     asr_mapping_path: Path,
     domain_architecture_path: Path,
     pdb_path: Path,
     output_dir: Path,
+    assignments_path: Optional[Path] = None,
     pdb_id: str = "2cg4",
 ) -> Dict[str, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    raw_pairwise_paths = {
-        "groups": raw_pairwise_groups,
-        "families": raw_pairwise_families,
-        "subfamilies": raw_pairwise_subfamilies,
-    }
-    score_paths = {
-        "groups": groups_scores_path,
-        "families": family_scores_path,
-        "subfamilies": subfamily_scores_path,
-    }
-
-    assignments = pd.read_csv(assignments_path)
+    analysis_levels = [DUPLICATION_LEVEL]
+    assignments = pd.read_csv(assignments_path) if assignments_path and assignments_path.exists() else pd.DataFrame()
     alignment_parsed = list(SeqIO.parse(str(msa_path), "fasta"))
     alignment_records = {rec.id: str(rec.seq) for rec in alignment_parsed}
     descriptions = {rec.id: rec.description for rec in alignment_parsed}
     ancestral_records = {rec.id: str(rec.seq) for rec in SeqIO.parse(str(ancestral_fasta_path), "fasta")}
-    asr_map_df = pd.read_csv(asr_mapping_path)
-    lca_to_asr = {
-        str(row["lca_node"]): str(row["lca_node_asr"])
-        for _, row in asr_map_df.iterrows()
-        if pd.notna(row.get("lca_node")) and pd.notna(row.get("lca_node_asr"))
-    }
+    if asr_mapping_path.exists():
+        asr_map_df = pd.read_csv(asr_mapping_path)
+        lca_to_asr = {
+            str(row["lca_node"]): str(row["lca_node_asr"])
+            for _, row in asr_map_df.iterrows()
+            if pd.notna(row.get("lca_node")) and pd.notna(row.get("lca_node_asr"))
+        }
+    else:
+        lca_to_asr = {}
     with domain_architecture_path.open("r") as handle:
         domain_architecture = json.load(handle)
 
@@ -898,14 +1000,18 @@ def run_phase7_analyses(
     tu_find = _run_tu_json(["tu", "find", "amino acid properties hydrophobicity charge", "--json"])
     tu_tools = [tool.get("name") for tool in tu_find.get("tools", [])[:5]]
 
-    events_by_level: Dict[str, pd.DataFrame] = {}
-    score_by_level: Dict[str, pd.DataFrame] = {}
-    for level in LEVELS:
-        events_by_level[level] = _load_switch_events_for_level(tree_path, assignments_path, raw_pairwise_paths[level], level)
-        score_by_level[level] = pd.read_csv(score_paths[level])
+    events_by_level: Dict[str, pd.DataFrame] = {
+        DUPLICATION_LEVEL: _load_switch_events_from_duplications(
+            tree_path=tree_path,
+            raw_pairwise_path=raw_pairwise_duplications,
+        )
+    }
+    score_by_level: Dict[str, pd.DataFrame] = {
+        DUPLICATION_LEVEL: pd.read_csv(duplication_scores_path),
+    }
 
     timeline_svg = output_dir / "switch_timeline.svg"
-    all_events = pd.concat([events_by_level[level] for level in LEVELS], ignore_index=True)
+    all_events = pd.concat([events_by_level[level] for level in analysis_levels], ignore_index=True)
     _plot_switch_timeline(all_events, timeline_svg)
     master_dendrogram_svg = output_dir / "master_dendrogram_switches.svg"
     _plot_master_dendrogram(tree_path=tree_path, events_by_level=events_by_level, output_svg=master_dendrogram_svg)
@@ -919,7 +1025,7 @@ def run_phase7_analyses(
         "master_dendrogram_switches_svg": master_dendrogram_svg,
     }
 
-    for level in LEVELS:
+    for level in analysis_levels:
         level_scores = score_by_level[level]
         level_events = events_by_level[level]
 
@@ -1023,14 +1129,15 @@ def run_phase7_analyses(
         communities["community_size"] = communities.groupby("community_id")["position"].transform("count")
         community_rows.append(communities)
 
-        tax_level = _collect_taxonomic_distribution(
-            level=level,
-            assignments=assignments,
-            descriptions=descriptions,
-            top_positions=functional_df["position"].astype(int).head(15).tolist() if not functional_df.empty else [],
-            alignment_records=alignment_records,
-        )
-        tax_rows.append(tax_level)
+        if not assignments.empty:
+            tax_level = _collect_taxonomic_distribution(
+                level=level,
+                assignments=assignments,
+                descriptions=descriptions,
+                top_positions=functional_df["position"].astype(int).head(15).tolist() if not functional_df.empty else [],
+                alignment_records=alignment_records,
+            )
+            tax_rows.append(tax_level)
 
     communities_df = pd.concat(community_rows, ignore_index=True) if community_rows else pd.DataFrame(columns=["position", "community_id", "level", "community_size"])
     communities_csv = output_dir / "coevolution_communities.csv"
@@ -1047,17 +1154,18 @@ def run_phase7_analyses(
     shifts_all_df.to_csv(shifts_all_csv, index=False)
     outputs["physicochemical_shifts_csv"] = shifts_all_csv
 
-    families_subfamilies = shifts_all_df[shifts_all_df["level"].isin(["families", "subfamilies"])].copy() if not shifts_all_df.empty else pd.DataFrame()
+    families_subfamilies = shifts_all_df.copy() if not shifts_all_df.empty else pd.DataFrame()
     map_input_csv = output_dir / "physicochemical_shifts_for_mapping.csv"
     families_subfamilies.to_csv(map_input_csv, index=False)
 
-    physio_cxc = Path("results/structural_mapping/highlight_physicochemistry.cxc")
-    mapper.generate_physicochemical_chimerax_script(
-        alignment_path=msa_path,
-        physicochemical_csv=map_input_csv,
-        output_cxc=physio_cxc,
-    )
-    outputs["physicochemical_mapping_cxc"] = physio_cxc
+    if not families_subfamilies.empty:
+        physio_cxc = Path("results/structural_mapping/highlight_physicochemistry.cxc")
+        mapper.generate_physicochemical_chimerax_script(
+            alignment_path=msa_path,
+            physicochemical_csv=map_input_csv,
+            output_cxc=physio_cxc,
+        )
+        outputs["physicochemical_mapping_cxc"] = physio_cxc
 
     if os.getenv("BADASP_SKIP_LITERATURE", "0") != "1":
         lit_queries = [
@@ -1073,7 +1181,7 @@ def run_phase7_analyses(
         print(f"- Candidate literature hits retrieved: {len(all_hits)}")
 
         top_predicted = set()
-        for level in LEVELS:
+        for level in analysis_levels:
             top_predicted.update(top_positions_for_lit.get(level, [])[:10])
         matched_mentions: List[Tuple[str, int]] = []
         for hit in all_hits:
@@ -1094,14 +1202,10 @@ def run_phase7_analyses(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Phase 7 evolutionary and physicochemical analysis")
-    parser.add_argument("--tree", default="results/topological_clustering/midpoint_rooted.tree")
+    parser.add_argument("--tree", default="results/topological_clustering/mad_rooted.tree")
     parser.add_argument("--assignments", default="results/topological_clustering/tree_cluster_assignments.csv")
-    parser.add_argument("--raw-pairwise-groups", default="results/badasp_scoring/raw_pairwise_groups.csv")
-    parser.add_argument("--raw-pairwise-families", default="results/badasp_scoring/raw_pairwise_families.csv")
-    parser.add_argument("--raw-pairwise-subfamilies", default="results/badasp_scoring/raw_pairwise_subfamilies.csv")
-    parser.add_argument("--groups-scores", default="results/badasp_scoring/badasp_scores_groups.csv")
-    parser.add_argument("--family-scores", default="results/badasp_scoring/badasp_scores_families.csv")
-    parser.add_argument("--subfamily-scores", default="results/badasp_scoring/badasp_scores_subfamilies.csv")
+    parser.add_argument("--raw-pairwise-duplications", default="results/badasp_scoring/raw_pairwise_duplications.csv")
+    parser.add_argument("--duplication-scores", default="results/badasp_scoring/badasp_scores_duplications.csv")
     parser.add_argument("--msa", default="data/interim/IPR019888_trimmed.aln")
     parser.add_argument("--ancestral", default="data/interim/ancestral_sequences.fasta")
     parser.add_argument("--asr-map", default="results/topological_clustering/tree_clusters_asr_mapped.csv")
@@ -1116,19 +1220,15 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     args = build_parser().parse_args(argv)
     outputs = run_phase7_analyses(
         tree_path=Path(args.tree),
-        assignments_path=Path(args.assignments),
-        raw_pairwise_groups=Path(args.raw_pairwise_groups),
-        raw_pairwise_families=Path(args.raw_pairwise_families),
-        raw_pairwise_subfamilies=Path(args.raw_pairwise_subfamilies),
-        groups_scores_path=Path(args.groups_scores),
-        family_scores_path=Path(args.family_scores),
-        subfamily_scores_path=Path(args.subfamily_scores),
+        raw_pairwise_duplications=Path(args.raw_pairwise_duplications),
+        duplication_scores_path=Path(args.duplication_scores),
         msa_path=Path(args.msa),
         ancestral_fasta_path=Path(args.ancestral),
         asr_mapping_path=Path(args.asr_map),
         domain_architecture_path=Path(args.domain_architecture),
         pdb_path=Path(args.pdb),
         output_dir=Path(args.output_dir),
+        assignments_path=Path(args.assignments) if args.assignments else None,
         pdb_id=str(args.pdb_id),
     )
     for label, path in outputs.items():

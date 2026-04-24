@@ -11,7 +11,7 @@ import pandas as pd
 import seaborn as sns
 from Bio import Phylo, SeqIO
 from Bio.Phylo.BaseTree import Clade, Tree
-from scipy.cluster.hierarchy import dendrogram, fcluster, set_link_color_palette
+from scipy.cluster.hierarchy import fcluster
 
 
 LEVEL_COLORS = {
@@ -94,6 +94,15 @@ def default_tree_switch_plot_paths() -> Tuple[Path, Path, Path]:
     )
 
 
+def default_duplication_badasp_plot_paths() -> Tuple[Path, Path, Path, Path]:
+    return (
+        Path("results/badasp_scoring/badasp_score_distribution_duplications.svg"),
+        Path("results/badasp_scoring/switch_counts_duplications.svg"),
+        Path("results/badasp_scoring/tree_switches_duplications.svg"),
+        Path("results/badasp_scoring/dendrogram_switches_duplications.svg"),
+    )
+
+
 def _read_fasta_lengths(fasta_path: Path) -> List[int]:
     return [len(record.seq) for record in SeqIO.parse(str(fasta_path), "fasta")]
 
@@ -150,24 +159,49 @@ def plot_topological_dendrogram(
 ) -> None:
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     z = np.asarray(linkage_matrix, dtype=float)
-    # Use an expanded palette so large clade counts can still receive distinct colors.
-    palette = [plt.cm.tab20(i / 20) for i in range(20)] + [plt.cm.Set3(i / 12) for i in range(12)]
-    set_link_color_palette([mcolors.to_hex(c) for c in palette])
+    if z.shape[0] < 1:
+        raise ValueError("Need at least 2 leaves to draw dendrogram.")
 
-    plt.figure(figsize=(12, 6))
-    dendrogram(
-        z,
-        no_labels=True,
-        color_threshold=color_threshold,
-        above_threshold_color="#666666",
-    )
-    set_link_color_palette(None)
-    plt.title("Topological Clustering Dendrogram")
-    plt.xlabel("Collapsed Leaf Groups")
-    plt.ylabel("Cophenetic Distance")
-    plt.tight_layout()
-    plt.savefig(output_svg, format="svg")
-    plt.close()
+    n_leaves = z.shape[0] + 1
+    leaves_order = list(range(n_leaves))
+    x_by_node, y_by_node, descendants = _compute_dendrogram_node_coords(z, leaves_order)
+
+    width = 12 if n_leaves <= max_leaves else min(40, 12 + (n_leaves / max_leaves) * 2.0)
+    fig, ax = plt.subplots(figsize=(width, 6))
+
+    palette = [mcolors.to_hex(c) for c in (list(plt.cm.tab20.colors) + list(plt.cm.Set3.colors))]
+    if color_threshold > 0.0:
+        leaf_cluster_ids = [int(x) for x in fcluster(z, t=float(color_threshold), criterion="distance")]
+        unique_clusters = sorted(set(leaf_cluster_ids))
+        cluster_color_map = {cid: palette[i % len(palette)] for i, cid in enumerate(unique_clusters)}
+    else:
+        leaf_cluster_ids = [0 for _ in range(n_leaves)]
+        cluster_color_map = {0: "#666666"}
+
+    for merge_idx, row in enumerate(z):
+        left = int(row[0])
+        right = int(row[1])
+        node_id = n_leaves + merge_idx
+        node_height = float(row[2])
+
+        leaf_ids = descendants[node_id]
+        leaf_clusters = {leaf_cluster_ids[leaf_id] for leaf_id in leaf_ids}
+        if color_threshold > 0.0 and node_height <= float(color_threshold) and len(leaf_clusters) == 1:
+            color = cluster_color_map[next(iter(leaf_clusters))]
+        else:
+            color = "#666666"
+
+        ax.plot([x_by_node[left], x_by_node[left]], [y_by_node[left], node_height], color=color, linewidth=1.0)
+        ax.plot([x_by_node[right], x_by_node[right]], [y_by_node[right], node_height], color=color, linewidth=1.0)
+        ax.plot([x_by_node[left], x_by_node[right]], [node_height, node_height], color=color, linewidth=1.0)
+
+    ax.set_title("Topological Clustering Dendrogram")
+    ax.set_xlabel("Collapsed Leaf Groups")
+    ax.set_ylabel("Cophenetic Distance")
+    ax.set_xticks([])
+    fig.tight_layout()
+    fig.savefig(output_svg, format="svg")
+    plt.close(fig)
 
 
 def _load_score_table(score_path: Path) -> pd.DataFrame:
@@ -188,6 +222,14 @@ def _load_pairwise_table(pairwise_path: Path) -> pd.DataFrame:
     return df
 
 
+def _compute_95th_threshold(scores: np.ndarray) -> float:
+    clean = np.asarray(scores, dtype=float)
+    clean = clean[np.isfinite(clean)]
+    if clean.size == 0:
+        return 0.0
+    return float(np.percentile(clean, 95))
+
+
 def plot_badasp_score_distribution(
     raw_pairwise_path: Path,
     output_svg: Path,
@@ -196,12 +238,12 @@ def plot_badasp_score_distribution(
 ) -> None:
     df = _load_pairwise_table(raw_pairwise_path)
     scores = df["score"].astype(float).to_numpy()
-    threshold = float(np.percentile(scores, 95)) if len(scores) else 0.0
+    threshold = _compute_95th_threshold(scores)
 
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     plt.figure(figsize=(10, 6))
     sns.histplot(scores, bins=40, stat="count", color=color, alpha=0.35)
-    plt.axvline(threshold, color=color, linestyle="--", linewidth=2.0, label=f"95th percentile = {threshold:.3f}")
+    plt.axvline(threshold, color=color, linestyle="--", linewidth=2.0, label=f"95th percentile = {threshold:.6f}")
     plt.title(title)
     plt.xlabel("Raw BADASP Score")
     plt.ylabel("Count")
@@ -231,9 +273,14 @@ def plot_hierarchical_badasp_distributions(
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     plt.figure(figsize=(11, 6))
 
+    thresholds = {
+        label: _compute_95th_threshold(df["score"].astype(float).to_numpy())
+        for label, df in score_tables.items()
+    }
+
     for label, df in score_tables.items():
         scores = df["score"].astype(float).to_numpy()
-        threshold = float(np.percentile(scores, 95)) if len(scores) else 0.0
+        threshold = thresholds[label]
         sns.histplot(
             scores,
             bins=40,
@@ -290,6 +337,33 @@ def plot_hierarchical_switch_counts(
 
     axes[-1].set_xlabel("Alignment Position")
     fig.suptitle("Hierarchical BADASP Switch Counts Across the Alignment", y=0.995)
+    fig.tight_layout()
+    fig.savefig(output_svg, format="svg")
+    plt.close(fig)
+
+
+def plot_duplication_badasp_distribution(raw_pairwise_path: Path, output_svg: Path) -> None:
+    plot_badasp_score_distribution(
+        raw_pairwise_path=raw_pairwise_path,
+        output_svg=output_svg,
+        title="Duplication-Directed BADASP Score Distribution",
+        color="#B24A2A",
+    )
+
+
+def plot_duplication_switch_counts(scores_path: Path, output_svg: Path) -> None:
+    scores = _load_score_table(scores_path)
+    positions = scores["position"].astype(int).to_numpy()
+    switch_counts = scores["switch_count"].astype(int).to_numpy()
+
+    output_svg.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(14, 4))
+    ax.bar(positions, switch_counts, color="#B24A2A", width=1.0, alpha=0.9)
+    ax.set_xlabel("Alignment Position")
+    ax.set_ylabel("Switches")
+    ax.set_title("Duplication-Directed BADASP Switch Counts")
+    ax.set_xlim(1, int(positions.max()))
+    ax.set_ylim(0, max(1, int(switch_counts.max())) + 1)
     fig.tight_layout()
     fig.savefig(output_svg, format="svg")
     plt.close(fig)
@@ -445,6 +519,45 @@ def build_switch_node_map(
         node_switch_counts[lca.name] += int(switch_count)
 
     return dict(node_switch_counts)
+
+
+def build_duplication_switch_node_map(raw_pairwise_path: Path) -> Dict[str, int]:
+    raw_pairwise = _load_pairwise_table(raw_pairwise_path)
+    if raw_pairwise.empty:
+        return {}
+
+    node_column = None
+    for candidate in ("lca_node_name", "lca_node_id", "duplication_node"):
+        if candidate in raw_pairwise.columns:
+            node_column = candidate
+            break
+    if node_column is None:
+        raise ValueError(
+            "Duplication pairwise table requires one of: lca_node_name, lca_node_id, duplication_node"
+        )
+
+    threshold = float(np.percentile(raw_pairwise["score"].astype(float), 95))
+    switched = raw_pairwise[raw_pairwise["score"] > threshold].copy()
+    if switched.empty:
+        return {}
+
+    switched[node_column] = switched[node_column].astype(str)
+    return switched.groupby(node_column).size().astype(int).to_dict()
+
+
+def generate_duplication_tree_switch_plot(
+    rooted_tree_path: Path,
+    raw_pairwise_duplications: Path,
+    output_svg: Path,
+) -> None:
+    node_switch_map = build_duplication_switch_node_map(raw_pairwise_duplications)
+    plot_tree_with_switches(
+        tree_path=rooted_tree_path,
+        node_switch_counts=node_switch_map,
+        output_svg=output_svg,
+        title="Switch Events on Tree: Duplication-Directed BADASP",
+        line_color="#B0B0B0",
+    )
 
 
 def plot_tree_with_switches(
@@ -741,95 +854,64 @@ def generate_dendrogram_switch_plots(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="QC and hierarchical BADASP visualizations.")
+    parser = argparse.ArgumentParser(description="QC and duplication-directed BADASP visualizations.")
     default_length_out, default_gap_out, _ = default_plot_paths()
-    default_hier_dist_out, default_hier_switch_out = default_hierarchical_badasp_plot_paths()
-    default_group_dist_out, default_family_dist_out, default_subfamily_dist_out = default_individual_badasp_plot_paths()
-    default_tree_groups_out, default_tree_families_out, default_tree_subfamilies_out = default_tree_switch_plot_paths()
+    default_dup_dist_out, default_dup_switch_out, default_dup_tree_out, default_dup_dendrogram_out = default_duplication_badasp_plot_paths()
     parser.add_argument("--fasta", default=None, help="Input FASTA for length distribution plot.")
     parser.add_argument("--length-output", default=str(default_length_out))
     parser.add_argument("--msa", default=None, help="Input MSA FASTA for gap-per-column plot.")
     parser.add_argument("--gap-output", default=str(default_gap_out))
-    parser.add_argument("--group-scores", default="results/badasp_scoring/badasp_scores_groups.csv")
-    parser.add_argument("--family-scores", default="results/badasp_scoring/badasp_scores_families.csv")
-    parser.add_argument("--subfamily-scores", default="results/badasp_scoring/badasp_scores_subfamilies.csv")
-    parser.add_argument("--group-pairwise", default="results/badasp_scoring/raw_pairwise_groups.csv")
-    parser.add_argument("--family-pairwise", default="results/badasp_scoring/raw_pairwise_families.csv")
-    parser.add_argument("--subfamily-pairwise", default="results/badasp_scoring/raw_pairwise_subfamilies.csv")
-    parser.add_argument("--rooted-tree", default="results/topological_clustering/midpoint_rooted.tree")
-    parser.add_argument("--assignments", default="results/topological_clustering/tree_cluster_assignments.csv")
-    parser.add_argument("--hierarchical-distribution-output", default=str(default_hier_dist_out))
-    parser.add_argument("--hierarchical-switch-output", default=str(default_hier_switch_out))
-    parser.add_argument("--group-distribution-output", default=str(default_group_dist_out))
-    parser.add_argument("--family-distribution-output", default=str(default_family_dist_out))
-    parser.add_argument("--subfamily-distribution-output", default=str(default_subfamily_dist_out))
-    parser.add_argument("--tree-switch-groups-output", default=str(default_tree_groups_out))
-    parser.add_argument("--tree-switch-families-output", default=str(default_tree_families_out))
-    parser.add_argument("--tree-switch-subfamilies-output", default=str(default_tree_subfamilies_out))
-    parser.add_argument("--dendrogram-switch-groups-output", default="results/badasp_scoring/dendrogram_switches_groups.svg")
-    parser.add_argument("--dendrogram-switch-families-output", default="results/badasp_scoring/dendrogram_switches_families.svg")
-    parser.add_argument("--dendrogram-switch-subfamilies-output", default="results/badasp_scoring/dendrogram_switches_subfamilies.svg")
-    parser.add_argument("--group-threshold", type=float, default=8.579924)
-    parser.add_argument("--family-threshold", type=float, default=6.929765)
-    parser.add_argument("--subfamily-threshold", type=float, default=4.729553)
+    parser.add_argument("--duplication-scores", default="results/badasp_scoring/badasp_scores_duplications.csv")
+    parser.add_argument("--duplication-pairwise", default="results/badasp_scoring/raw_pairwise_duplications.csv")
+    parser.add_argument("--rooted-tree", default="results/topological_clustering/mad_rooted.tree")
+    parser.add_argument("--duplication-distribution-output", default=str(default_dup_dist_out))
+    parser.add_argument("--duplication-switch-output", default=str(default_dup_switch_out))
+    parser.add_argument("--tree-switch-duplications-output", default=str(default_dup_tree_out))
+    parser.add_argument("--dendrogram-switch-duplications-output", default=str(default_dup_dendrogram_out))
     parser.add_argument("--min-clade-size", type=int, default=5)
-    parser.add_argument("--hierarchical-only", action="store_true")
+    parser.add_argument("--plots-only", action="store_true")
     args = parser.parse_args()
 
-    if args.fasta and not args.hierarchical_only:
+    if args.fasta and not args.plots_only:
         plot_sequence_length_distribution(Path(args.fasta), Path(args.length_output))
         print(f"Saved length distribution: {args.length_output}")
 
-    if args.msa and not args.hierarchical_only:
+    if args.msa and not args.plots_only:
         plot_gap_percentage_per_column(Path(args.msa), Path(args.gap_output))
         print(f"Saved gap profile: {args.gap_output}")
 
-    if Path(args.group_pairwise).exists() and Path(args.family_pairwise).exists() and Path(args.subfamily_pairwise).exists():
-        plot_individual_hierarchical_badasp_distributions(
-            group_pairwise=Path(args.group_pairwise),
-            family_pairwise=Path(args.family_pairwise),
-            subfamily_pairwise=Path(args.subfamily_pairwise),
-            output_group_svg=Path(args.group_distribution_output),
-            output_family_svg=Path(args.family_distribution_output),
-            output_subfamily_svg=Path(args.subfamily_distribution_output),
-        )
-        print(f"Saved group score distribution: {args.group_distribution_output}")
-        print(f"Saved family score distribution: {args.family_distribution_output}")
-        print(f"Saved subfamily score distribution: {args.subfamily_distribution_output}")
+    pairwise_path = Path(args.duplication_pairwise)
+    scores_path = Path(args.duplication_scores)
+    rooted_tree_path = Path(args.rooted_tree)
 
-        plot_hierarchical_badasp_distributions(
-            group_pairwise=Path(args.group_pairwise),
-            family_pairwise=Path(args.family_pairwise),
-            subfamily_pairwise=Path(args.subfamily_pairwise),
-            output_svg=Path(args.hierarchical_distribution_output),
+    if pairwise_path.exists():
+        plot_duplication_badasp_distribution(
+            raw_pairwise_path=pairwise_path,
+            output_svg=Path(args.duplication_distribution_output),
         )
-        print(f"Saved hierarchical score distributions: {args.hierarchical_distribution_output}")
+        print(f"Saved duplication score distribution: {args.duplication_distribution_output}")
 
-        plot_hierarchical_switch_counts(
-            group_scores=Path(args.group_scores),
-            family_scores=Path(args.family_scores),
-            subfamily_scores=Path(args.subfamily_scores),
-            output_svg=Path(args.hierarchical_switch_output),
+    if scores_path.exists():
+        plot_duplication_switch_counts(
+            scores_path=scores_path,
+            output_svg=Path(args.duplication_switch_output),
         )
-        print(f"Saved hierarchical switch counts: {args.hierarchical_switch_output}")
+        print(f"Saved duplication switch counts: {args.duplication_switch_output}")
 
-        generate_dendrogram_switch_plots(
-            tree_path=Path(args.rooted_tree),
-            assignments_path=Path(args.assignments),
-            raw_pairwise_groups=Path(args.group_pairwise),
-            raw_pairwise_families=Path(args.family_pairwise),
-            raw_pairwise_subfamilies=Path(args.subfamily_pairwise),
-            output_groups_svg=Path(args.dendrogram_switch_groups_output),
-            output_families_svg=Path(args.dendrogram_switch_families_output),
-            output_subfamilies_svg=Path(args.dendrogram_switch_subfamilies_output),
-            group_threshold=float(args.group_threshold),
-            family_threshold=float(args.family_threshold),
-            subfamily_threshold=float(args.subfamily_threshold),
-            min_clade_size=int(args.min_clade_size),
+    if rooted_tree_path.exists() and pairwise_path.exists():
+        generate_duplication_tree_switch_plot(
+            rooted_tree_path=rooted_tree_path,
+            raw_pairwise_duplications=pairwise_path,
+            output_svg=Path(args.tree_switch_duplications_output),
         )
-        print(f"Saved dendrogram switches plot (groups): {args.dendrogram_switch_groups_output}")
-        print(f"Saved dendrogram switches plot (families): {args.dendrogram_switch_families_output}")
-        print(f"Saved dendrogram switches plot (subfamilies): {args.dendrogram_switch_subfamilies_output}")
+        print(f"Saved tree switches plot (duplications): {args.tree_switch_duplications_output}")
+
+        generate_duplication_tree_switch_plot(
+            rooted_tree_path=rooted_tree_path,
+            raw_pairwise_duplications=pairwise_path,
+            output_svg=Path(args.dendrogram_switch_duplications_output),
+        )
+        print(f"Saved dendrogram switches plot (duplications): {args.dendrogram_switch_duplications_output}")
 
 
 if __name__ == "__main__":

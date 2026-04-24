@@ -292,11 +292,26 @@ class TestChimeraXScriptGeneration:
         pdb_id = "2cg4"
         alignment_path = Path("data/interim/IPR019888_trimmed.aln")
         sdp_csv_families = Path("results/badasp_scoring/badasp_scores_families.csv")
+        sdp_csv_duplications = Path("results/badasp_scoring/badasp_scores_duplications.csv")
+
+        if sdp_csv_families.exists():
+            selected_csv = sdp_csv_families
+            output_key = "families"
+            generate_kwargs = {
+                "sdp_csv_families": selected_csv,
+            }
+        else:
+            selected_csv = sdp_csv_duplications
+            output_key = "duplications"
+            generate_kwargs = {
+                "sdp_csv_duplications": selected_csv,
+            }
+
         mapper = PDBMapper(pdb_id=pdb_id)
         mapping = mapper.map_alignment_to_structure(alignment_path=alignment_path)
         expected_positions = sorted(
             int(pos)
-            for pos in pd.read_csv(sdp_csv_families).query("switch_count > 0")["position"].tolist()
+            for pos in pd.read_csv(selected_csv).query("switch_count > 0")["position"].tolist()
             if int(pos) in mapping
         )
         expected_residues = sorted(mapping[pos] for pos in expected_positions)
@@ -305,13 +320,11 @@ class TestChimeraXScriptGeneration:
             output_dir = Path(tmpdir)
             outputs = mapper.generate_chimerax_scripts(
                 alignment_path=alignment_path,
-                sdp_csv_groups=Path("results/badasp_scoring/badasp_scores_groups.csv"),
-                sdp_csv_families=sdp_csv_families,
-                sdp_csv_subfamilies=Path("results/badasp_scoring/badasp_scores_subfamilies.csv"),
                 output_dir=output_dir,
+                **generate_kwargs,
             )
 
-            content = outputs["families"].read_text()
+            content = outputs[output_key].read_text()
             for residue in expected_residues:
                 assert f":{residue}" in content
 
@@ -357,6 +370,35 @@ class TestChimeraXScriptGeneration:
             for script_path in outputs.values():
                 content = script_path.read_text()
                 assert "\nkey " not in content
+
+    def test_chimerax_scripts_write_base_commands_when_no_switches(self, monkeypatch):
+        mapper = PDBMapper(pdb_id="2cg4")
+
+        monkeypatch.setattr(mapper, "download_pdb", lambda: "data/raw/2cg4.pdb")
+        monkeypatch.setattr(mapper, "map_alignment_to_structure", lambda alignment_path: {10: 100, 20: 200})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            no_switch_csv = tmp / "no_switch.csv"
+            no_switch_csv.write_text(
+                "position,max_score,switch_count\n10,0.2,0\n20,0.3,0\n",
+                encoding="utf-8",
+            )
+
+            outputs = mapper.generate_chimerax_scripts(
+                alignment_path=Path("data/interim/IPR019888_trimmed.aln"),
+                sdp_csv_groups=no_switch_csv,
+                sdp_csv_families=no_switch_csv,
+                sdp_csv_subfamilies=no_switch_csv,
+                output_dir=tmp,
+            )
+
+            for path in outputs.values():
+                content = path.read_text(encoding="utf-8")
+                assert path.stat().st_size > 0
+                assert "open " in content
+                assert "_residues: none" in content
+                assert "reason: no switch_count > 0 rows" in content
 
     def test_generate_physicochemical_chimerax_script(self, monkeypatch):
         """Generate a physicochemical-shift ChimeraX script with rule-based coloring."""
