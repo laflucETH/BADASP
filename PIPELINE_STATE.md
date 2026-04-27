@@ -12,6 +12,17 @@
 - Phase 7 reran from the updated Phase 5 outputs, then `scripts/regenerate_stale_plots.py` reported `0` stale files.
 - Mathematical proof check confirmed `raw_rows_ge_threshold == sdp_total_switch_count == 1352` at threshold `1.270761446912`.
 
+## Threshold Explorer Checkpoint (2026-04-27)
+- Added `scripts/explore_thresholds.py` to derive stricter duplication SDP tables directly from `results/badasp_scoring/raw_pairwise_duplications.csv` without rerunning Phase 5.
+- The explorer generates percentile-specific outputs for 97th and 99th percentiles:
+  - `results/badasp_scoring/badasp_sdps_duplications_p97.csv`
+  - `results/badasp_scoring/badasp_sdps_duplications_p99.csv`
+  - `results/badasp_scoring/switch_counts_duplications_p97.svg`
+  - `results/badasp_scoring/switch_counts_duplications_p99.svg`
+  - `results/structural_mapping/highlight_sdps_duplications_p97.cxc`
+  - `results/structural_mapping/highlight_sdps_duplications_p99.cxc`
+- Visualization support now accepts a percentile argument so stricter switch plots can be rendered without touching Phase 5 scoring.
+
 ## Architecture Evolution: Duplication-Directed Scoring (2026-04-24)
 - The old 3-level Group/Family/Subfamily downstream scoring path is now archival only.
 - Phase 5 now scores left-vs-right clade comparisons for high-confidence duplication nodes from `results/reconciliation/duplication_nodes.csv`.

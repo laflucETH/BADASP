@@ -360,11 +360,11 @@ def plot_duplication_badasp_distribution(raw_pairwise_path: Path, output_svg: Pa
     )
 
 
-def plot_duplication_switch_counts(raw_pairwise_path: Path, output_svg: Path) -> None:
+def plot_duplication_switch_counts(raw_pairwise_path: Path, output_svg: Path, percentile: float = 95.0) -> None:
     raw = _load_raw_switch_table(raw_pairwise_path)
     scores = pd.to_numeric(raw["score"], errors="coerce")
     scores = scores[np.isfinite(scores)]
-    threshold = float(np.percentile(scores.to_numpy(dtype=float), 95)) if not scores.empty else 0.0
+    threshold = float(np.percentile(scores.to_numpy(dtype=float), float(percentile))) if not scores.empty else 0.0
     switched = raw[pd.to_numeric(raw["score"], errors="coerce") >= threshold].copy()
     if switched.empty:
         positions = np.array([], dtype=int)
@@ -393,7 +393,7 @@ def plot_duplication_switch_counts(raw_pairwise_path: Path, output_svg: Path) ->
     ax.text(
         0.99,
         0.95,
-        f"95th pct = {threshold:.6f}; top switch: alignment col {top_col} (count={top_count})",
+        f"{percentile:g}th pct = {threshold:.6f}; top switch: alignment col {top_col} (count={top_count})",
         transform=ax.transAxes,
         ha="right",
         va="top",

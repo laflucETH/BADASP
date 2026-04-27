@@ -353,6 +353,29 @@ def test_plot_duplication_distributions_and_switches_write_svg(tmp_path: Path) -
     assert switch_svg.stat().st_size > 0
 
 
+def test_plot_duplication_switch_counts_supports_custom_percentile(tmp_path: Path) -> None:
+    from src.visualization import plot_duplication_switch_counts
+
+    pairwise = tmp_path / "raw_pairwise_duplications.csv"
+    switch_svg = tmp_path / "switch_counts_duplications_p99.svg"
+
+    pd.DataFrame(
+        {
+            "pair": ["Node1_L-Node1_R"] * 6,
+            "position": [1, 2, 3, 4, 5, 6],
+            "score": [0.1, 0.2, 0.3, 0.4, 1.8, 2.2],
+            "lca_node_name": ["N1"] * 6,
+        }
+    ).to_csv(pairwise, index=False)
+
+    plot_duplication_switch_counts(pairwise, switch_svg, percentile=99)
+
+    svg_text = switch_svg.read_text(encoding="utf-8").lower()
+    assert switch_svg.exists()
+    assert switch_svg.stat().st_size > 0
+    assert "99th pct" in svg_text
+
+
 def test_build_duplication_switch_node_map_counts_lca_threshold_events(tmp_path: Path) -> None:
     from src.visualization import build_duplication_switch_node_map
 
