@@ -609,40 +609,6 @@ def compute_multilevel_badasp_scores(
             if score > position_max_scores[pos]:
                 position_max_scores[pos] = score
 
-    flat_scores = [score for score in score_col if score > 0]
-    global_threshold = float(np.percentile(flat_scores, 95)) if flat_scores else 0.0
-
-    switch_counts = np.zeros(aln_length, dtype=int)
-    for idx, score in enumerate(score_col):
-        if score > global_threshold:
-            switch_counts[pos_col[idx] - 1] += 1
-
-    position_rows = []
-    for pos in range(1, aln_length + 1):
-        max_score = float(position_max_scores[pos - 1]) if np.isfinite(position_max_scores[pos - 1]) else 0.0
-        switch_count = int(switch_counts[pos - 1])
-        position_rows.append(
-            {
-                "position": pos,
-                "max_score": float(max_score),
-                "switch_count": switch_count,
-                "global_threshold": global_threshold,
-                "badasp_score": float(max_score),
-            }
-        )
-
-    score_df = pd.DataFrame(position_rows)
-    sdp_df, threshold = identify_sdps(score_df)
-
-    if score_col:
-        max_idx = int(np.argmax(score_col))
-        print(
-            f"[DUPLICATIONS] Max Pos: Pos={pos_col[max_idx]}, RC={rc_col[max_idx]:.6f}, AC={ac_col[max_idx]:.6f}, p={p_ac_col[max_idx]:.6f}, Score={score_col[max_idx]:.6f}"
-        )
-        print(f"[DUPLICATIONS] Global pooled threshold (95th percentile over score>0): {global_threshold:.6f}")
-    if skipped_missing_nodes:
-        print(f"[DUPLICATIONS] Skipped {skipped_missing_nodes} duplication pairs due to missing child nodes or ancestral sequences.")
-
     pairwise_df = pd.DataFrame(
         {
             "duplication_node": dup_node_col,
@@ -658,6 +624,17 @@ def compute_multilevel_badasp_scores(
         columns=pairwise_columns,
     )
 
+    score_df, sdp_df, threshold = summarize_duplication_outputs(pairwise_df=pairwise_df, aln_length=aln_length)
+
+    if score_col:
+        max_idx = int(np.argmax(score_col))
+        print(
+            f"[DUPLICATIONS] Max Pos: Pos={pos_col[max_idx]}, RC={rc_col[max_idx]:.6f}, AC={ac_col[max_idx]:.6f}, p={p_ac_col[max_idx]:.6f}, Score={score_col[max_idx]:.6f}"
+        )
+        print(f"[DUPLICATIONS] Global pooled threshold (95th percentile over all valid scores): {threshold:.6f}")
+    if skipped_missing_nodes:
+        print(f"[DUPLICATIONS] Skipped {skipped_missing_nodes} duplication pairs due to missing child nodes or ancestral sequences.")
+
     return {
         "duplications": {
             "pairwise": pairwise_df,
@@ -672,16 +649,66 @@ def compute_multilevel_badasp_scores(
     }
 
 
+def summarize_duplication_outputs(pairwise_df: pd.DataFrame, aln_length: int) -> Tuple[pd.DataFrame, pd.DataFrame, float]:
+    if pairwise_df.empty:
+        threshold = 0.0
+        score_df = pd.DataFrame(
+            {
+                "position": np.arange(1, aln_length + 1, dtype=int),
+                "max_score": np.zeros(aln_length, dtype=float),
+                "switch_count": np.zeros(aln_length, dtype=int),
+                "global_threshold": np.zeros(aln_length, dtype=float),
+                "badasp_score": np.zeros(aln_length, dtype=float),
+            }
+        )
+        sdp_df = score_df.iloc[0:0].copy()
+        return score_df, sdp_df, threshold
+
+    valid_scores = pd.to_numeric(pairwise_df["score"], errors="coerce")
+    valid_scores = valid_scores[np.isfinite(valid_scores)]
+    threshold = float(np.percentile(valid_scores.to_numpy(dtype=float), 95)) if not valid_scores.empty else 0.0
+
+    position_summary = (
+        pairwise_df.groupby("position", as_index=False)
+        .agg(max_score=("score", "max"))
+        .astype({"position": int, "max_score": float})
+    )
+
+    switched_events = pairwise_df[pairwise_df["score"] >= threshold].copy()
+    switch_counts = (
+        switched_events.groupby("position", as_index=False)
+        .agg(switch_count=("duplication_node", "nunique"))
+        .astype({"position": int, "switch_count": int})
+    )
+
+    all_positions = pd.DataFrame({"position": np.arange(1, aln_length + 1, dtype=int)})
+    score_df = all_positions.merge(position_summary, on="position", how="left")
+    score_df = score_df.merge(switch_counts, on="position", how="left")
+    score_df["max_score"] = score_df["max_score"].fillna(0.0).astype(float)
+    score_df["switch_count"] = score_df["switch_count"].fillna(0).astype(int)
+    score_df["global_threshold"] = float(threshold)
+    score_df["badasp_score"] = score_df["max_score"].astype(float)
+
+    sdp_df = score_df[score_df["switch_count"] > 0].copy()
+    sdp_df = sdp_df.sort_values(["switch_count", "max_score", "position"], ascending=[False, False, True]).reset_index(drop=True)
+    return score_df, sdp_df, threshold
+
+
 def identify_sdps(scores_df: pd.DataFrame, percentile: float = 95.0) -> Tuple[pd.DataFrame, float]:
     if "switch_count" in scores_df.columns:
-        max_switch_count = scores_df["switch_count"].max()
-        if scores_df.empty or max_switch_count <= 0:
+        if scores_df.empty:
+            return scores_df.iloc[0:0].copy(), 0.0
+
+        if "global_threshold" in scores_df.columns:
+            threshold = float(scores_df["global_threshold"].iloc[0])
+        else:
+            threshold = float(np.percentile(scores_df["badasp_score"], percentile))
+
+        sdps = scores_df[scores_df["switch_count"] > 0].copy()
+        if sdps.empty:
             threshold = float(scores_df["global_threshold"].iloc[0]) if "global_threshold" in scores_df.columns and not scores_df.empty else 0.0
-            empty = scores_df.iloc[0:0].copy()
-            return empty, threshold
-        sdps = scores_df[scores_df["switch_count"] == max_switch_count].copy()
-        sdps = sdps.sort_values(["switch_count", "max_score"], ascending=[False, False]).reset_index(drop=True)
-        threshold = float(scores_df["global_threshold"].iloc[0]) if "global_threshold" in scores_df.columns and not scores_df.empty else float(np.percentile(scores_df["badasp_score"], percentile))
+            return scores_df.iloc[0:0].copy(), threshold
+        sdps = sdps.sort_values(["switch_count", "max_score", "position"], ascending=[False, False, True]).reset_index(drop=True)
         return sdps, threshold
 
     threshold = float(np.percentile(scores_df["badasp_score"], percentile))

@@ -3,6 +3,7 @@ import tempfile
 
 import pandas as pd
 import pytest
+import numpy as np
 
 from src.badasp_core import (
     BADASPCore,
@@ -12,6 +13,7 @@ from src.badasp_core import (
     identify_sdps,
     load_reconciliation_events,
     load_state_file,
+    summarize_duplication_outputs,
 )
 
 
@@ -158,7 +160,7 @@ def test_identify_sdps_prefers_switch_count():
     )
     sdps, threshold = identify_sdps(scores_df)
     assert threshold == pytest.approx(0.75)
-    assert set(sdps["position"]) == {2, 3}
+    assert set(sdps["position"]) == {1, 2, 3, 4}
 
 
 def test_identify_sdps_returns_empty_when_no_switches():
@@ -174,6 +176,30 @@ def test_identify_sdps_returns_empty_when_no_switches():
     sdps, threshold = identify_sdps(scores_df)
     assert sdps.empty
     assert threshold == 0.0
+
+
+def test_summarize_duplication_outputs_matches_pooled_threshold_identity():
+    pairwise_df = pd.DataFrame(
+        {
+            "duplication_node": ["Node1", "Node1", "Node2", "Node2", "Node3"],
+            "left_child": ["A", "A", "B", "B", "C"],
+            "right_child": ["D", "D", "E", "E", "F"],
+            "pair": ["A-D", "A-D", "B-E", "B-E", "C-F"],
+            "position": [10, 11, 10, 11, 12],
+            "rc": [0.5, 0.5, 0.5, 0.5, 0.5],
+            "ac": [-1.0, -1.0, -1.0, -1.0, -1.0],
+            "p_ac": [0.5, 0.5, 0.5, 0.5, 0.5],
+            "score": [-1.0, 0.1, 0.2, 0.3, 1.5],
+        }
+    )
+
+    score_df, sdp_df, threshold = summarize_duplication_outputs(pairwise_df=pairwise_df, aln_length=15)
+
+    expected_threshold = float(np.percentile(pairwise_df["score"].to_numpy(dtype=float), 95))
+    expected_crossings = pairwise_df[pairwise_df["score"] >= expected_threshold]
+    assert threshold == pytest.approx(expected_threshold)
+    assert int(expected_crossings.shape[0]) == int(sdp_df["switch_count"].sum())
+    assert int((score_df["switch_count"] > 0).sum()) == int(sdp_df.shape[0])
 
 
 def test_badasp_core_writes_duplication_outputs(
