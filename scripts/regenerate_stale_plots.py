@@ -30,7 +30,7 @@ from src.evolutionary_analysis import (
 )
 
 
-REF = Path("results/badasp_scoring/badasp_scores_duplications.csv")
+REF = Path("results/badasp_scoring/badasp_sdps_duplications.csv")
 MAD_TREE = Path("results/topological_clustering/mad_rooted.tree")
 ASSIGNMENTS = Path("results/topological_clustering/tree_cluster_assignments.csv")
 TREE_CLUSTERS = Path("results/topological_clustering/tree_clusters.csv")
@@ -109,7 +109,7 @@ def regenerate_phase3_plots() -> None:
 
 def regenerate_badasp_plots() -> None:
     pairwise = SCORES_DIR / "raw_pairwise_duplications.csv"
-    scores = SCORES_DIR / "badasp_scores_duplications.csv"
+    scores = SCORES_DIR / "badasp_sdps_duplications.csv"
 
     plot_duplication_badasp_distribution(
         raw_pairwise_path=pairwise,
@@ -221,7 +221,7 @@ def regenerate_badasp_plots() -> None:
 
 def regenerate_structural_artifacts() -> None:
     mapper = PDBMapper(pdb_id="2cg4", pdb_file="data/raw/2cg4.pdb")
-    duplication_scores = SCORES_DIR / "badasp_scores_duplications.csv"
+    duplication_scores = SCORES_DIR / "badasp_sdps_duplications.csv"
     if duplication_scores.exists():
         mapper.generate_chimerax_scripts(
             alignment_path=Path("data/interim/IPR019888_trimmed.aln"),
@@ -267,7 +267,7 @@ def regenerate_evolutionary_plots() -> None:
         normalize=True,
     )
 
-    level_scores = pd.read_csv(SCORES_DIR / "badasp_scores_duplications.csv")
+    level_scores = pd.read_csv(SCORES_DIR / "badasp_sdps_duplications.csv")
     _plot_architecture_boxplot(
         level_scores,
         domain_arch,

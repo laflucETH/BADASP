@@ -224,25 +224,28 @@ class PDBMapper:
         high_hex: str,
         min_value: Optional[float] = None,
         max_value: Optional[float] = None,
-    ) -> List[Tuple[int, str]]:
-        scored_residues: Dict[int, float] = {}
+    ) -> List[Tuple[int, str, int, float]]:
+        scored_residues: Dict[int, Tuple[int, float]] = {}
         for msa_pos, value in top_rows:
             if msa_pos not in mapping:
                 continue
             residue = mapping[msa_pos]
-            scored_residues[residue] = max(value, scored_residues.get(residue, float("-inf")))
+            existing = scored_residues.get(residue)
+            if existing is None or float(value) > float(existing[1]):
+                scored_residues[residue] = (int(msa_pos), float(value))
 
         if not scored_residues:
             return []
 
-        min_val = float(min_value) if min_value is not None else min(scored_residues.values())
-        max_val = float(max_value) if max_value is not None else max(scored_residues.values())
+        values = [float(item[1]) for item in scored_residues.values()]
+        min_val = float(min_value) if min_value is not None else min(values)
+        max_val = float(max_value) if max_value is not None else max(values)
         scale = max(max_val - min_val, 1e-9)
 
-        residue_colors: List[Tuple[int, str]] = []
-        for residue, value in sorted(scored_residues.items()):
+        residue_colors: List[Tuple[int, str, int, float]] = []
+        for residue, (msa_col, value) in sorted(scored_residues.items()):
             fraction = (value - min_val) / scale
-            residue_colors.append((residue, self._interpolate_hex(low_hex, high_hex, fraction)))
+            residue_colors.append((residue, self._interpolate_hex(low_hex, high_hex, fraction), msa_col, value))
         return residue_colors
 
     @staticmethod
@@ -308,7 +311,7 @@ class PDBMapper:
     def _build_chimerax_script(
         self,
         pdb_path: Path,
-        residue_pairs: Sequence[Tuple[int, float]],
+        residue_pairs: Sequence[Tuple[int, str, int, float]],
         output_path: Path,
         level_label: str,
         min_switch_count: int,
@@ -319,7 +322,7 @@ class PDBMapper:
     ) -> Path:
         """Write a publication-quality ChimeraX script for one hierarchy level."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        residues = [residue for residue, _ in residue_pairs]
+        residues = [residue for residue, _, _, _ in residue_pairs]
 
         lines = [
             f"# BADASP Phase 6 structural mapping: {level_label}",
@@ -337,8 +340,10 @@ class PDBMapper:
 
         if residues:
             selector = ",".join(str(residue) for residue in residues)
-            for residue, color_hex in residue_pairs:
-                lines.append(f"color :{residue} {color_hex}")
+            for residue, color_hex, alignment_col, switch_value in residue_pairs:
+                lines.append(
+                    f"color :{residue} {color_hex}  # mapped from alignment col {alignment_col} (switch_count={int(round(switch_value))})"
+                )
 
             lines.append(f"# {level_label.lower()}_residues: {selector}")
         else:
@@ -426,6 +431,12 @@ class PDBMapper:
                 min_value=min_switch_count,
                 max_value=max_switch_count,
             )
+            if rows and not pairs:
+                top_alignment_col, top_switch = max(rows, key=lambda item: float(item[1]))
+                no_switch_reason = (
+                    f"{len(rows)} switched alignment columns found, but none mapped to PDB residues "
+                    f"(top alignment col {int(top_alignment_col)}, switch_count={int(round(top_switch))})"
+                )
             output_path = output_dir / filename
             self._build_chimerax_script(
                 pdb_path,
@@ -584,10 +595,10 @@ class PDBMapper:
 
 
 def _resolve_sdp_csv(base_dir: Path, level: str) -> Path:
-    preferred = base_dir / f"badasp_scores_{level}.csv"
+    preferred = base_dir / f"badasp_sdps_{level}.csv"
     if preferred.exists():
         return preferred
-    return base_dir / f"badasp_sdps_{level}.csv"
+    return base_dir / f"badasp_scores_{level}.csv"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -634,7 +645,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         output_dir=Path(args.output_cxc).parent,
     )
     combined = Path(args.output_cxc)
-    if combined.exists():
+    if combined.exists() and combined not in set(outputs.values()):
         combined.unlink()
     print("Generated ChimeraX scripts: " + ", ".join(str(path) for path in outputs.values()))
 
