@@ -677,7 +677,8 @@ def summarize_duplication_outputs(pairwise_df: pd.DataFrame, aln_length: int) ->
     switched_events = pairwise_df[pairwise_df["score"] >= threshold].copy()
     switch_counts = (
         switched_events.groupby("position", as_index=False)
-        .agg(switch_count=("duplication_node", "nunique"))
+        .size()
+        .rename(columns={"size": "switch_count"})
         .astype({"position": int, "switch_count": int})
     )
 
@@ -689,7 +690,10 @@ def summarize_duplication_outputs(pairwise_df: pd.DataFrame, aln_length: int) ->
     score_df["global_threshold"] = float(threshold)
     score_df["badasp_score"] = score_df["max_score"].astype(float)
 
-    sdp_df = score_df[score_df["switch_count"] > 0].copy()
+    sdp_df = switched_events.groupby("position", as_index=False).size().rename(columns={"size": "switch_count"})
+    sdp_df = sdp_df.merge(position_summary, on="position", how="left")
+    sdp_df["global_threshold"] = float(threshold)
+    sdp_df["badasp_score"] = sdp_df["max_score"].astype(float)
     sdp_df = sdp_df.sort_values(["switch_count", "max_score", "position"], ascending=[False, False, True]).reset_index(drop=True)
     return score_df, sdp_df, threshold
 
@@ -706,7 +710,6 @@ def identify_sdps(scores_df: pd.DataFrame, percentile: float = 95.0) -> Tuple[pd
 
         sdps = scores_df[scores_df["switch_count"] > 0].copy()
         if sdps.empty:
-            threshold = float(scores_df["global_threshold"].iloc[0]) if "global_threshold" in scores_df.columns and not scores_df.empty else 0.0
             return scores_df.iloc[0:0].copy(), threshold
         sdps = sdps.sort_values(["switch_count", "max_score", "position"], ascending=[False, False, True]).reset_index(drop=True)
         return sdps, threshold

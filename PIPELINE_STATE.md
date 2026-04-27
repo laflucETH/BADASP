@@ -3,13 +3,14 @@
 ## Project
 - Name: BADASP replication pipeline for IPR019888 (PF13404 track included)
 - Mode: Reproducible, modular Python workflow
-- Current date: 2026-04-24
-- Status: Duplication-directed Phase 5 scoring completed on the 346 high-confidence duplication nodes; downstream architecture now uses left-vs-right clade pairs instead of Group/Family/Subfamily hierarchy
+- Current date: 2026-04-27
+- Status: Duplication-directed Phase 5 scoring is synced to the corrected pooled-threshold math; downstream architecture now uses left-vs-right clade pairs instead of Group/Family/Subfamily hierarchy
 
 ## Latest Run Status (2026-04-22)
-- Phase 6 and 7 dynamic reruns are complete using the local fast-path (`BADASP_LOCAL_PROTPARAM=1 BADASP_SKIP_LITERATURE=1`).
-- All downstream evolutionary and physicochemical figures are organically freshly synced following the restoration of the `_compute_architecture_enrichment` function.
-- Audit reported 0 stale files, verifying that the fast-path generation successfully updated all artifacts.
+- Phase 5 regeneration completed with the corrected raw-pairwise pooled threshold and refreshed duplication outputs.
+- Phase 6 ChimeraX export regenerated with valid standalone provenance comments above each `color` command.
+- Phase 7 reran from the updated Phase 5 outputs, then `scripts/regenerate_stale_plots.py` reported `0` stale files.
+- Mathematical proof check confirmed `raw_rows_ge_threshold == sdp_total_switch_count == 1352` at threshold `1.270761446912`.
 
 ## Architecture Evolution: Duplication-Directed Scoring (2026-04-24)
 - The old 3-level Group/Family/Subfamily downstream scoring path is now archival only.
@@ -19,7 +20,7 @@
   - `results/badasp_scoring/raw_pairwise_duplications.csv`
   - `results/badasp_scoring/badasp_scores_duplications.csv`
   - `results/badasp_scoring/badasp_sdps_duplications.csv`
-- Current pooled SDP threshold: `1.478707`
+- Current pooled SDP threshold: `1.270761446912`
 - Current duplication-pair yield: `160`
 
 ## Downstream Duplication Refactor Checkpoint (2026-04-24)
@@ -39,6 +40,21 @@
   - Regeneration commands completed:
     - `PYTHONPATH=. venv/bin/python src/evolutionary_analysis.py --tree results/topological_clustering/mad_rooted.tree --output-dir results/evolutionary_analysis`
     - `PYTHONPATH=. venv/bin/python scripts/regenerate_stale_plots.py`
+
+## Switch Overlay Restoration Checkpoint (2026-04-24)
+- Root cause addressed: duplication-node labels from ASR outputs were not directly mappable to nameless internal branches in `mad_rooted.tree`.
+- Implemented leaf-signature remapping between named ASR tree (`data/interim/asr_run.treefile`) and plotting tree nodes in:
+  - `src/evolutionary_analysis.py`
+  - `src/visualization.py`
+- Timeline restoration: `root_distance` now resolves using remapped plot-tree node depth with fallback to ASR-tree node depth when needed.
+- Dendrogram restoration: master/tree switch overlays now remap duplication-node identifiers before plotting.
+- Verification:
+  - `PYTHONPATH=. venv/bin/python src/evolutionary_analysis.py --tree results/topological_clustering/mad_rooted.tree --output-dir results/evolutionary_analysis`
+  - `PYTHONPATH=. venv/bin/python scripts/regenerate_stale_plots.py`
+  - Inline SVG text assertions confirmed switch markers in:
+    - `results/evolutionary_analysis/switch_timeline.svg`
+    - `results/evolutionary_analysis/master_dendrogram_switches.svg`
+  - Full regression suite: `108/108` passed.
 
 ## Monday Completion Milestone (2026-04-20)
 - **Phase 3 (Clustering):** Verified existing MAD-rooted tree from weekend (1.2MB, 21,641+ sequences, valid Newick format). Skipped re-clustering to save time. Tree confirmed: `results/topological_clustering/mad_rooted.tree`

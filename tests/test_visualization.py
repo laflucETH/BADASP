@@ -332,7 +332,6 @@ def test_plot_duplication_distributions_and_switches_write_svg(tmp_path: Path) -
     )
 
     pairwise = tmp_path / "raw_pairwise_duplications.csv"
-    scores = tmp_path / "badasp_scores_duplications.csv"
     dist_svg = tmp_path / "badasp_score_distribution_duplications.svg"
     switch_svg = tmp_path / "switch_counts_duplications.svg"
 
@@ -345,17 +344,8 @@ def test_plot_duplication_distributions_and_switches_write_svg(tmp_path: Path) -
         }
     ).to_csv(pairwise, index=False)
 
-    pd.DataFrame(
-        {
-            "position": [1, 2, 3, 4],
-            "switch_count": [0, 1, 2, 1],
-            "global_threshold": [1.0, 1.0, 1.0, 1.0],
-            "badasp_score": [0.0, 0.5, 1.2, 0.7],
-        }
-    ).to_csv(scores, index=False)
-
     plot_duplication_badasp_distribution(pairwise, dist_svg)
-    plot_duplication_switch_counts(scores, switch_svg)
+    plot_duplication_switch_counts(pairwise, switch_svg)
 
     assert dist_svg.exists()
     assert dist_svg.stat().st_size > 0

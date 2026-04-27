@@ -341,9 +341,8 @@ class PDBMapper:
         if residues:
             selector = ",".join(str(residue) for residue in residues)
             for residue, color_hex, alignment_col, switch_value in residue_pairs:
-                lines.append(
-                    f"color :{residue} {color_hex}  # mapped from alignment col {alignment_col} (switch_count={int(round(switch_value))})"
-                )
+                lines.append(f"# Mapped from alignment col {alignment_col} (switch_count={int(round(switch_value))})")
+                lines.append(f"color :{residue} {color_hex}")
 
             lines.append(f"# {level_label.lower()}_residues: {selector}")
         else:

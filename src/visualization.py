@@ -213,12 +213,12 @@ def _load_score_table(score_path: Path) -> pd.DataFrame:
     return df
 
 
-def _load_switch_source_table(score_path: Path) -> pd.DataFrame:
-    df = pd.read_csv(score_path)
-    required_columns = {"position", "switch_count"}
+def _load_raw_switch_table(raw_pairwise_path: Path) -> pd.DataFrame:
+    df = pd.read_csv(raw_pairwise_path)
+    required_columns = {"position", "score"}
     missing = required_columns - set(df.columns)
     if missing:
-        raise ValueError(f"Missing required columns in {score_path}: {sorted(missing)}")
+        raise ValueError(f"Missing required columns in {raw_pairwise_path}: {sorted(missing)}")
     return df
 
 
@@ -360,28 +360,40 @@ def plot_duplication_badasp_distribution(raw_pairwise_path: Path, output_svg: Pa
     )
 
 
-def plot_duplication_switch_counts(scores_path: Path, output_svg: Path) -> None:
-    scores = _load_switch_source_table(scores_path)
-    scores = scores.sort_values(["position"]).copy()
-    positions = scores["position"].astype(int).to_numpy()
-    switch_counts = scores["switch_count"].astype(int).to_numpy()
-
-    top_row = scores.sort_values(["switch_count", "position"], ascending=[False, True]).head(1)
-    top_col = int(top_row.iloc[0]["position"]) if not top_row.empty else 0
-    top_count = int(top_row.iloc[0]["switch_count"]) if not top_row.empty else 0
+def plot_duplication_switch_counts(raw_pairwise_path: Path, output_svg: Path) -> None:
+    raw = _load_raw_switch_table(raw_pairwise_path)
+    scores = pd.to_numeric(raw["score"], errors="coerce")
+    scores = scores[np.isfinite(scores)]
+    threshold = float(np.percentile(scores.to_numpy(dtype=float), 95)) if not scores.empty else 0.0
+    switched = raw[pd.to_numeric(raw["score"], errors="coerce") >= threshold].copy()
+    if switched.empty:
+        positions = np.array([], dtype=int)
+        switch_counts = np.array([], dtype=int)
+        top_col = 0
+        top_count = 0
+    else:
+        switch_df = switched.groupby("position", as_index=False).size().rename(columns={"size": "switch_count"})
+        switch_df = switch_df.sort_values(["position"]).copy()
+        positions = switch_df["position"].astype(int).to_numpy()
+        switch_counts = switch_df["switch_count"].astype(int).to_numpy()
+        top_row = switch_df.sort_values(["switch_count", "position"], ascending=[False, True]).head(1)
+        top_col = int(top_row.iloc[0]["position"]) if not top_row.empty else 0
+        top_count = int(top_row.iloc[0]["switch_count"]) if not top_row.empty else 0
 
     output_svg.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(14, 4))
-    ax.bar(positions, switch_counts, color="#B24A2A", width=1.0, alpha=0.9)
+    if len(positions):
+        ax.bar(positions, switch_counts, color="#B24A2A", width=1.0, alpha=0.9)
     ax.set_xlabel("Alignment Column Index")
     ax.set_ylabel("Switches")
     ax.set_title("Duplication-Directed BADASP Switch Counts")
-    ax.set_xlim(1, int(positions.max()))
-    ax.set_ylim(0, max(1, int(switch_counts.max())) + 1)
+    if len(positions):
+        ax.set_xlim(1, int(positions.max()))
+        ax.set_ylim(0, max(1, int(switch_counts.max())) + 1)
     ax.text(
         0.99,
         0.95,
-        f"Top switch: alignment col {top_col} (count={top_count})",
+        f"95th pct = {threshold:.6f}; top switch: alignment col {top_col} (count={top_count})",
         transform=ax.transAxes,
         ha="right",
         va="top",
@@ -933,7 +945,6 @@ def main() -> None:
     parser.add_argument("--length-output", default=str(default_length_out))
     parser.add_argument("--msa", default=None, help="Input MSA FASTA for gap-per-column plot.")
     parser.add_argument("--gap-output", default=str(default_gap_out))
-    parser.add_argument("--duplication-scores", default="results/badasp_scoring/badasp_sdps_duplications.csv")
     parser.add_argument("--duplication-pairwise", default="results/badasp_scoring/raw_pairwise_duplications.csv")
     parser.add_argument("--rooted-tree", default="results/topological_clustering/mad_rooted.tree")
     parser.add_argument("--duplication-distribution-output", default=str(default_dup_dist_out))
@@ -953,7 +964,6 @@ def main() -> None:
         print(f"Saved gap profile: {args.gap_output}")
 
     pairwise_path = Path(args.duplication_pairwise)
-    scores_path = Path(args.duplication_scores)
     rooted_tree_path = Path(args.rooted_tree)
 
     if pairwise_path.exists():
@@ -963,9 +973,9 @@ def main() -> None:
         )
         print(f"Saved duplication score distribution: {args.duplication_distribution_output}")
 
-    if scores_path.exists():
+    if pairwise_path.exists():
         plot_duplication_switch_counts(
-            scores_path=scores_path,
+            raw_pairwise_path=pairwise_path,
             output_svg=Path(args.duplication_switch_output),
         )
         print(f"Saved duplication switch counts: {args.duplication_switch_output}")

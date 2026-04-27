@@ -121,7 +121,7 @@ def regenerate_badasp_plots() -> None:
     )
 
     plot_duplication_switch_counts(
-        scores_path=scores,
+        raw_pairwise_path=pairwise,
         output_svg=SCORES_DIR / "switch_counts_duplications.svg",
     )
 
