@@ -481,6 +481,49 @@ class PDBMapper:
         )
         return outputs.get("duplications", outputs.get("families", next(iter(outputs.values()))))
 
+    def generate_single_chimerax_script(
+        self,
+        alignment_path: Path,
+        sdp_csv: Path,
+        output_cxc: Path,
+        level_label: str = "Duplications",
+    ) -> Path:
+        """Generate one ChimeraX script from an explicit SDP CSV file."""
+        pdb_path = Path(self.download_pdb())
+        mapping = self.map_alignment_to_structure(alignment_path)
+        rows, no_switch_reason = self._all_switch_rows_from_csv(sdp_csv)
+        _, max_switch_count = self._switch_count_bounds(rows)
+        min_switch_count = 0
+        low_hex = "#FBE6E6"
+        high_hex = "#7A0000"
+        pairs = self._residue_color_pairs(
+            rows,
+            mapping,
+            low_hex=low_hex,
+            high_hex=high_hex,
+            min_value=min_switch_count,
+            max_value=max_switch_count,
+        )
+        if rows and not pairs:
+            top_alignment_col, top_switch = max(rows, key=lambda item: float(item[1]))
+            no_switch_reason = (
+                f"{len(rows)} switched alignment columns found, but none mapped to PDB residues "
+                f"(top alignment col {int(top_alignment_col)}, switch_count={int(round(top_switch))})"
+            )
+
+        self._build_chimerax_script(
+            pdb_path,
+            pairs,
+            output_cxc,
+            level_label,
+            min_switch_count,
+            max_switch_count,
+            low_hex,
+            high_hex,
+            no_switch_reason=no_switch_reason,
+        )
+        return output_cxc
+
     def generate_physicochemical_chimerax_script(
         self,
         alignment_path: Path,
@@ -619,6 +662,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="results/structural_mapping/highlight_sdps.cxc",
         help="Output ChimeraX script path",
     )
+    parser.add_argument(
+        "--sdp-csv",
+        default=None,
+        help="Optional explicit SDP CSV to map into a single output CXC script",
+    )
     parser.add_argument("--top-n", type=int, default=10, help="Top N SDPs per level")
     return parser
 
@@ -629,6 +677,18 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     mapper = PDBMapper(pdb_id=args.pdb_id, pdb_file=args.pdb_file)
     scores_dir = Path(args.scores_dir)
     alignment = Path(args.alignment)
+    output_cxc = Path(args.output_cxc)
+
+    if args.sdp_csv:
+        sdp_csv = Path(args.sdp_csv)
+        mapper.generate_single_chimerax_script(
+            alignment_path=alignment,
+            sdp_csv=sdp_csv,
+            output_cxc=output_cxc,
+            level_label="Duplications",
+        )
+        print(f"Generated ChimeraX script: {output_cxc}")
+        return
 
     duplications_csv = _resolve_sdp_csv(scores_dir, "duplications")
     groups_csv = _resolve_sdp_csv(scores_dir, "groups")
@@ -641,9 +701,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         sdp_csv_groups=groups_csv,
         sdp_csv_families=families_csv,
         sdp_csv_subfamilies=subfamilies_csv,
-        output_dir=Path(args.output_cxc).parent,
+        output_dir=output_cxc.parent,
     )
-    combined = Path(args.output_cxc)
+    combined = output_cxc
     if combined.exists() and combined not in set(outputs.values()):
         combined.unlink()
     print("Generated ChimeraX scripts: " + ", ".join(str(path) for path in outputs.values()))
