@@ -27,6 +27,7 @@ class PDBMapper:
         self.pdb_file = Path(pdb_file) if pdb_file else None
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._last_protein_chain_id: Optional[str] = None
 
     def download_pdb(self) -> str:
         """Download a PDB file using Biopython or reuse a cached local copy."""
@@ -63,13 +64,14 @@ class PDBMapper:
         representative = min(records, key=lambda r: str(r.seq).count("-"))
         return str(representative.seq)
 
-    def _extract_pdb_sequence_and_residue_numbers(self, pdb_path: Path) -> Tuple[str, List[int]]:
+    def _extract_pdb_sequence_and_residue_numbers(self, pdb_path: Path) -> Tuple[str, List[int], Optional[str]]:
         if pdb_path.suffix.lower() == ".cif":
             structure = MMCIFParser(QUIET=True).get_structure(self.pdb_id, str(pdb_path))
         else:
             structure = PDBParser(QUIET=True).get_structure(self.pdb_id, str(pdb_path))
 
         residues: List[Tuple[str, int]] = []
+        selected_chain_id: Optional[str] = None
         for model in structure:
             for chain in model:
                 chain_residues: List[Tuple[str, int]] = []
@@ -83,6 +85,7 @@ class PDBMapper:
                     chain_residues.append((aa, resseq))
                 if chain_residues:
                     residues = chain_residues
+                    selected_chain_id = str(chain.id).strip() or None
                     break
             if residues:
                 break
@@ -92,13 +95,14 @@ class PDBMapper:
 
         sequence = "".join(aa for aa, _ in residues)
         numbers = [n for _, n in residues]
-        return sequence, numbers
+        return sequence, numbers, selected_chain_id
 
     def map_alignment_to_structure(self, alignment_path: Path) -> Dict[int, int]:
         """Map alignment column index (1-based) to PDB residue number."""
         pdb_path = Path(self.download_pdb())
         msa_seq_gapped = self._extract_representative_msa_sequence(alignment_path)
-        pdb_seq, pdb_residue_numbers = self._extract_pdb_sequence_and_residue_numbers(pdb_path)
+        pdb_seq, pdb_residue_numbers, protein_chain_id = self._extract_pdb_sequence_and_residue_numbers(pdb_path)
+        self._last_protein_chain_id = protein_chain_id
 
         ungapped_to_msa_col: List[int] = []
         msa_ungapped_chars: List[str] = []
@@ -319,6 +323,7 @@ class PDBMapper:
         low_hex: str,
         high_hex: str,
         no_switch_reason: str = "",
+        chain_id: Optional[str] = None,
     ) -> Path:
         """Write a publication-quality ChimeraX script for one hierarchy level."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -342,9 +347,12 @@ class PDBMapper:
             selector = ",".join(str(residue) for residue in residues)
             for residue, color_hex, alignment_col, switch_value in residue_pairs:
                 lines.append(f"# Mapped from alignment col {alignment_col} (switch_count={int(round(switch_value))})")
-                lines.append(f"color :{residue} {color_hex}")
+                residue_selector = f"/{chain_id}:{residue}" if chain_id else f":{residue}"
+                lines.append(f"color {residue_selector} {color_hex}")
 
             lines.append(f"# {level_label.lower()}_residues: {selector}")
+            if chain_id:
+                lines.append(f"# target_chain: {chain_id}")
         else:
             lines.append(f"# {level_label.lower()}_residues: none")
             if no_switch_reason:
@@ -447,6 +455,7 @@ class PDBMapper:
                 low_hex,
                 high_hex,
                 no_switch_reason=no_switch_reason,
+                chain_id=self._last_protein_chain_id,
             )
             self._write_switch_legend_png(
                 output_path=output_dir / f"legend_{level}.png",
@@ -521,6 +530,7 @@ class PDBMapper:
             low_hex,
             high_hex,
             no_switch_reason=no_switch_reason,
+            chain_id=self._last_protein_chain_id,
         )
         return output_cxc
 

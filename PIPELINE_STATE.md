@@ -23,6 +23,30 @@
   - `results/structural_mapping/highlight_sdps_duplications_p99.cxc`
 - Visualization support now accepts a percentile argument so stricter switch plots can be rendered without touching Phase 5 scoring.
 
+## AlphaFold Ghost-Loop Structural Mapping Checkpoint (2026-04-28)
+- Ingested custom AlphaFold model containing the insertion loop and DNA complex:
+  - `data/raw/AF_with_loop.cif`
+- Extended `src/pdb_mapper.py` CLI with explicit single-file mapping mode:
+  - New flag: `--sdp-csv <path>`
+  - Behavior: when provided, mapper writes exactly one ChimeraX script to `--output-cxc` without relying on auto-resolved score filenames.
+  - Existing `--pdb-file` behavior remains download-free for local `.cif`/`.pdb` inputs.
+- Added TDD coverage in `tests/test_pdb_mapper.py` for:
+  - explicit single-output script generation path
+  - CLI `main()` invocation with `--sdp-csv` + `--pdb-file`
+- Generated strict-threshold ChimeraX outputs against the AlphaFold loop model:
+  - `results/structural_mapping/AF_loop_sdps_p97.cxc`
+  - `results/structural_mapping/AF_loop_sdps_p99.cxc`
+- Verification result for highest-switch site:
+  - Alignment column `127` is now mapped in p99 output to AlphaFold residue `111` (no unmapped fallback triggered).
+
+## AlphaFold DNA-Safe Mapping Update (2026-04-28)
+- Structural mapping scripts were updated to use chain-specific ChimeraX selectors (`/A:<residue>`) derived from the mapped protein chain, preventing accidental coloring of DNA residues that share residue numbers.
+- Added strict-threshold AlphaFold loop scripts for all three active cutoffs:
+  - `results/structural_mapping/AF_loop_sdps_p95.cxc`
+  - `results/structural_mapping/AF_loop_sdps_p97.cxc`
+  - `results/structural_mapping/AF_loop_sdps_p99.cxc`
+- Verified generated scripts contain chain-restricted selectors only (no plain `:<residue>` selectors).
+
 ## Architecture Evolution: Duplication-Directed Scoring (2026-04-24)
 - The old 3-level Group/Family/Subfamily downstream scoring path is now archival only.
 - Phase 5 now scores left-vs-right clade comparisons for high-confidence duplication nodes from `results/reconciliation/duplication_nodes.csv`.

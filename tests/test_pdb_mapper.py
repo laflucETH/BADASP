@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 from Bio import SeqIO
 
-from src.pdb_mapper import PDBMapper
+from src.pdb_mapper import PDBMapper, main
 
 
 class TestPDBDownloader:
@@ -507,3 +507,101 @@ class TestPDBMapperEndToEnd:
                 output_pml=output_pml,
             )
             assert output_pml.exists()
+
+
+class TestPDBMapperCLI:
+    """CLI-focused tests for explicit SDP mapping outputs."""
+
+    def test_generate_single_chimerax_script_uses_explicit_output_path(self, monkeypatch):
+        mapper = PDBMapper(pdb_id="2cg4")
+        monkeypatch.setattr(mapper, "download_pdb", lambda: "data/raw/2cg4.pdb")
+        monkeypatch.setattr(mapper, "map_alignment_to_structure", lambda alignment_path: {127: 500})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            sdp_csv = tmp / "badasp_sdps_duplications_p99.csv"
+            sdp_csv.write_text(
+                "position,max_score,switch_count\n127,1.7,10\n",
+                encoding="utf-8",
+            )
+            output_cxc = tmp / "custom_output.cxc"
+
+            out = mapper.generate_single_chimerax_script(
+                alignment_path=Path("data/interim/IPR019888_trimmed.aln"),
+                sdp_csv=sdp_csv,
+                output_cxc=output_cxc,
+                level_label="Duplications",
+            )
+
+            assert out == output_cxc
+            assert output_cxc.exists()
+            content = output_cxc.read_text(encoding="utf-8")
+            assert "# Mapped from alignment col 127" in content
+            assert "color :500" in content
+
+    def test_generate_single_chimerax_script_uses_chain_specific_selectors_when_available(self, monkeypatch):
+        mapper = PDBMapper(pdb_id="2cg4")
+        mapper._last_protein_chain_id = "A"
+        monkeypatch.setattr(mapper, "download_pdb", lambda: "data/raw/2cg4.pdb")
+        monkeypatch.setattr(mapper, "map_alignment_to_structure", lambda alignment_path: {127: 500})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            sdp_csv = tmp / "badasp_sdps_duplications_p99.csv"
+            sdp_csv.write_text(
+                "position,max_score,switch_count\n127,1.7,10\n",
+                encoding="utf-8",
+            )
+            output_cxc = tmp / "custom_output_chain.cxc"
+
+            out = mapper.generate_single_chimerax_script(
+                alignment_path=Path("data/interim/IPR019888_trimmed.aln"),
+                sdp_csv=sdp_csv,
+                output_cxc=output_cxc,
+                level_label="Duplications",
+            )
+
+            assert out == output_cxc
+            content = output_cxc.read_text(encoding="utf-8")
+            assert "color /A:500" in content
+            assert "# target_chain: A" in content
+
+    def test_main_with_explicit_sdp_csv_writes_requested_output(self, monkeypatch):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            alignment = tmp / "small.aln"
+            alignment.write_text(
+                ">seq1\nAAAA\n",
+                encoding="utf-8",
+            )
+            sdp_csv = tmp / "explicit_sdps.csv"
+            sdp_csv.write_text(
+                "position,max_score,switch_count\n2,1.0,3\n",
+                encoding="utf-8",
+            )
+            pdb_file = tmp / "mock.pdb"
+            pdb_file.write_text("ATOM\n", encoding="utf-8")
+            output_cxc = tmp / "explicit_output.cxc"
+
+            monkeypatch.setattr(PDBMapper, "download_pdb", lambda self: str(pdb_file))
+            monkeypatch.setattr(PDBMapper, "map_alignment_to_structure", lambda self, alignment_path: {2: 42})
+
+            main(
+                [
+                    "--pdb-id",
+                    "2cg4",
+                    "--pdb-file",
+                    str(pdb_file),
+                    "--alignment",
+                    str(alignment),
+                    "--sdp-csv",
+                    str(sdp_csv),
+                    "--output-cxc",
+                    str(output_cxc),
+                ]
+            )
+
+            assert output_cxc.exists()
+            content = output_cxc.read_text(encoding="utf-8")
+            assert "# Mapped from alignment col 2" in content
+            assert "color :42" in content
